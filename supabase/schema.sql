@@ -955,6 +955,7 @@ as $$
 declare
   v_uid   uuid;
   v_id    bigint;
+  v_str   text;
   v_row   record;
   v_out   jsonb := '{}'::jsonb;
 begin
@@ -1019,9 +1020,9 @@ begin
     v_out := jsonb_build_object('rejected', true);
 
   elsif p_action = 'bulk-approve-deposits' then
-    for i in select (jsonb_array_elements_text(coalesce(p_params->'ids','[]'::jsonb)))->>0
+    for v_str in select jsonb_array_elements_text(coalesce(p_params->'ids','[]'::jsonb))
     loop
-      perform public.admin_action('approve-deposit', jsonb_build_object('id', i));
+      perform public.admin_action('approve-deposit', jsonb_build_object('id', v_str));
     end loop;
     v_out := jsonb_build_object('ok', true);
 
