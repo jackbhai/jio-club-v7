@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase.js';
+import { supabase, rpc } from '../../lib/supabase.js';
 import { toast, Field, Toggle, Modal, Confirm, Empty } from '../../components/ui.jsx';
 import { Ic } from '../../lib/icons.jsx';
 import { sfx } from '../../lib/sound.js';
+import QRCode from 'qrcode';
 
 /* ============ shared settings loader ============ */
 function useSettings() {
@@ -98,6 +99,7 @@ export function WalletSection() {
       <NumRow label="Maximum Withdrawal (₹)" value={w.maxWithdrawal} onChange={(v) => set('wallet', { maxWithdrawal: v })} />
       <NumRow label="Welcome Bonus (₹, once)" value={w.welcomeBonus} onChange={(v) => set('wallet', { welcomeBonus: v })} />
       <NumRow label="Daily Bet Limit per user (₹)" desc="0 = unlimited · server enforced" value={w.dailyBetLimit ?? 0} onChange={(v) => set('wallet', { dailyBetLimit: v })} />
+      <NumRow label="Daily Deposit Limit per user (₹)" desc="0 = unlimited · server enforced (pending + approved)" value={w.dailyDepositLimit ?? 0} onChange={(v) => set('wallet', { dailyDepositLimit: v })} />
       <SaveBtn onClick={() => save('wallet', 'Wallet settings saved')} />
     </Shell>
   );
@@ -496,6 +498,149 @@ export function LinksSection() {
             setDel(null);
           }} />
       )}
+    </div>
+  );
+}
+
+/* ============ 11. SECURITY (2FA/MFA) ============ */
+export function SecuritySection() {
+  const [status, setStatus] = useState(null);
+  const [setup, setSetup] = useState(null); // {secret, otpauth}
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [qr, setQr] = useState('');
+  const [confirmDisable, setConfirmDisable] = useState(false);
+  const [disableCode, setDisableCode] = useState('');
+
+  useEffect(() => {
+    rpc('mfa_status').then((d) => setStatus(d.data || {})).catch(() => setStatus({}));
+  }, []);
+
+  useEffect(() => {
+    if (setup?.otpauth) {
+      QRCode.toDataURL(setup.otpauth, { width: 220, margin: 1 }).then(setQr).catch(() => setQr(''));
+    }
+  }, [setup]);
+
+  async function doSetup() {
+    setBusy(true);
+    const { data, error } = await rpc('mfa_setup');
+    setBusy(false);
+    if (error) { sfx.error(); toast(error.message, 'error'); return; }
+    setSetup(data);
+    sfx.cash();
+  }
+
+  async function doEnable() {
+    if (code.length !== 6) { toast('6-digit code daalo (authenticator app se)', 'error'); return; }
+    setBusy(true);
+    const { data, error } = await rpc('mfa_enable', { p_code: code });
+    setBusy(false);
+    if (error) { sfx.error(); toast(error.message, 'error'); return; }
+    sfx.win();
+    toast('2FA ENABLED — ab admin login pe code lagega', 'success');
+    setSetup(null); setCode(''); setQr('');
+    const d = await rpc('mfa_status');
+    setStatus(d.data || {});
+  }
+
+  async function doDisable() {
+    if (disableCode.length !== 6) { toast('6-digit code daalo', 'error'); return; }
+    setBusy(true);
+    const { error } = await rpc('mfa_disable', { p_code: disableCode });
+    setBusy(false);
+    if (error) { sfx.error(); toast(error.message, 'error'); return; }
+    sfx.cash();
+    toast('2FA disabled', 'info');
+    setConfirmDisable(false); setDisableCode('');
+    const d = await rpc('mfa_status');
+    setStatus(d.data || {});
+  }
+
+  const enabled = !!status?.enabled;
+
+  return (
+    <div className="page-enter">
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title"><Ic n="shieldCheck" s={18} />Admin 2FA (TOTP)</div>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{
+            padding: '10px 18px', borderRadius: 12, fontWeight: 900, fontSize: '0.95rem',
+            background: enabled ? 'rgba(46,230,168,0.12)' : 'rgba(255,200,87,0.12)',
+            color: enabled ? 'var(--success)' : 'var(--warning)',
+            display: 'flex', gap: 8, alignItems: 'center'
+          }}>
+            <Ic n={enabled ? 'shieldCheck' : 'alert'} s={18} />
+            {enabled ? '2FA ACTIVE — login pe 6-digit code' : '2FA OFF — enable karo (recommended)'}
+          </div>
+          {!enabled && !setup && (
+            <button className="btn btn-primary" onClick={doSetup} disabled={busy}>
+              <Ic n="plus" s={15} />Enable 2FA
+            </button>
+          )}
+        </div>
+        <p className="card-sub" style={{ marginTop: 12, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <Ic n="info" s={14} style={{ marginTop: 2, flexShrink: 0 }} />
+          Authenticator app: Google Authenticator, Authy, Aegis (F-Droid). Code har 30 second mein badalta hai.
+          Code + app dono ke bina admin panel nahi khulega. Session 30 min tak remember hota hai.
+        </p>
+      </div>
+
+      {setup && (
+        <div className="card">
+          <div className="card-title"><Ic n="qr" s={18} />Step: QR scan karke verify karo</div>
+          {qr && <img src={qr} alt="TOTP QR" style={{ width: 200, height: 200, margin: '0 auto 12px', display: 'block', borderRadius: 14, background: '#fff', padding: 8 }} />}
+          <div className="form-group">
+            <label>Secret (manual entry ke liye)</label>
+            <input className="input" readOnly value={setup.secret} style={{ fontFamily: 'monospace', fontSize: '0.85rem' }}
+              onFocus={(e) => e.target.select()} />
+          </div>
+          <p className="card-sub" style={{ marginBottom: 10 }}>
+            1) Authenticator app se QR scan karo (ya secret manually daalo)  2) App ka current 6-digit code neeche daalo
+          </p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="input" style={{ flex: 1, textAlign: 'center', letterSpacing: 6, fontSize: '1.2rem', fontWeight: 900 }}
+              inputMode="numeric" maxLength={6} placeholder="••••••" value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))} />
+            <button className="btn btn-primary" onClick={doEnable} disabled={busy || code.length !== 6}>
+              <Ic n="check" s={15} />Verify & Enable
+            </button>
+            <button className="btn btn-ghost" onClick={() => { setSetup(null); setQr(''); setCode(''); }}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {enabled && (
+        <div className="card">
+          <div className="card-title"><Ic n="alert" s={17} />Disable 2FA</div>
+          {!confirmDisable ? (
+            <button className="btn btn-ghost" onClick={() => setConfirmDisable(true)}>
+              <Ic n="shield" s={15} />Disable 2FA…
+            </button>
+          ) : (
+            <div>
+              <p className="card-sub" style={{ marginBottom: 10 }}>Current authenticator code daal ke confirm karo.</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className="input" style={{ flex: 1, textAlign: 'center', letterSpacing: 6, fontSize: '1.1rem', fontWeight: 900 }}
+                  inputMode="numeric" maxLength={6} placeholder="••••••" value={disableCode}
+                  onChange={(e) => setDisableCode(e.target.value.replace(/\D/g, ''))} />
+                <button className="btn btn-danger" onClick={doDisable} disabled={busy || disableCode.length !== 6}>
+                  <Ic n="check" s={15} />Disable
+                </button>
+                <button className="btn btn-ghost" onClick={() => { setConfirmDisable(false); setDisableCode(''); }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="card">
+        <div className="card-title"><Ic n="key" s={17} />Service Key Note</div>
+        <p className="card-sub">
+          Supabase <b>service_role key</b> kabhi bhi aise share mat karo jahan publicly dikhe.
+          Project → Settings → API se regenerate kar sakte ho (purani turant invalid ho jati hai).
+        </p>
+      </div>
     </div>
   );
 }

@@ -99,9 +99,15 @@ export default function Wallet({ game, profile, user, features }) {
   }
 
   async function onRazorpay() {
-    if (amt <= 0) { toast('Enter amount', 'error'); return; }
+    if (amt <= 0 || !rzpKeyId) { toast('Enter amount', 'error'); return; }
     setBusy(true);
     try {
+      // 1) Server-side order creation (Edge Function — secret key sirf server pe)
+      const { data: ord, error: ordErr } = await supabase.functions.invoke('razorpay-pay', {
+        body: { action: 'create-order', amount: amt, env: rzpEnv }
+      });
+      if (ordErr || ord?.error) throw new Error(ord?.error || ordErr.message || 'Order create failed');
+
       if (!window.Razorpay) {
         await new Promise((res, rej) => {
           const s = document.createElement('script');
@@ -111,22 +117,32 @@ export default function Wallet({ game, profile, user, features }) {
         });
       }
       const rzp = new window.Razorpay({
-        key: payments.razorpayKeyId,
-        amount: Math.round(amt * 100),
+        key: rzpKeyId,
+        order_id: ord.order_id,
+        amount: Math.round((ord.amount ?? amt) * 100),
         currency: 'INR',
         name: appName,
-        description: 'Wallet Deposit (test mode)',
+        description: 'Wallet Deposit' + (rzpEnv === 'live' ? '' : ' (test mode)'),
         prefill: { email: profile.email },
         handler: async (resp) => {
           try {
-            const { error } = await supabase.from('deposits').insert({
-              uid: user.id, amount: amt, upi_ref: resp.razorpay_payment_id || '',
-              payment_mode: 'razorpay', status: 'pending',
-              note: 'Razorpay test mode — admin approval required'
+            // 2) Server-side signature verification (HMAC-SHA256 with secret — client nahi kar sakta)
+            const { data: ver, error: verErr } = await supabase.functions.invoke('razorpay-pay', {
+              body: { action: 'verify', order_id: ord.order_id, payment_id: resp.razorpay_payment_id, signature: resp.razorpay_signature }
             });
-            if (error) throw new Error(error.message);
-            sfx.cash();
-            toast('Payment received — pending admin approval', 'success');
+            if (verErr || ver?.error) {
+              // fallback: pending deposit (manual admin approval)
+              const { error } = await supabase.from('deposits').insert({
+                uid: user.id, amount: amt, upi_ref: resp.razorpay_payment_id || '',
+                payment_mode: 'razorpay', status: 'pending',
+                note: 'auto-verify failed — manual review'
+              });
+              if (error) throw new Error(error.message);
+              toast('Payment recorded — pending admin approval', 'info');
+            } else {
+              sfx.win();
+              toast(`Payment VERIFIED — ${money(ver.amount)} added!`, 'success');
+            }
             setAmount('');
             loadHistory();
           } catch (e) { toast(e.message, 'error'); }

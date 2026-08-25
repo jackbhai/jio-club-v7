@@ -18,7 +18,7 @@ import SupportInbox from './sections/SupportInbox.jsx';
 import {
   FeaturesSection, PayoutsSection, WalletSection, UpiSection,
   PaymentsSection, CommunitySection, AppearanceSection, SoundsSection,
-  LinksSection, ContactSection
+  LinksSection, ContactSection, SecuritySection
 } from './sections/AdminSettings.jsx';
 import { ChatSection, AnnouncementsSection } from './sections/Community.jsx';
 import Analytics from './sections/Analytics.jsx';
@@ -49,7 +49,8 @@ const SECTIONS = [
   { id: 'appearance', label: 'Appearance', ico: 'sparkles', group: 'Settings' },
   { id: 'sounds', label: 'Sounds', ico: 'volume', group: 'Settings' },
   { id: 'links', label: 'Links Directory', ico: 'link', group: 'Settings' },
-  { id: 'contact', label: 'Contact & About', ico: 'headset', group: 'Settings' }
+  { id: 'contact', label: 'Contact & About', ico: 'headset', group: 'Settings' },
+  { id: 'security', label: 'Security / 2FA', ico: 'shieldCheck', group: 'Settings' }
 ];
 
 const GROUPS = ['Main', 'Game Engine', 'Money', 'Growth', 'Support', 'Insights', 'Settings'];
@@ -103,6 +104,11 @@ export default function AdminApp() {
   const [checking, setChecking] = useState(true);
   const [section, setSection] = useState('dashboard');
   const [drawer, setDrawer] = useState(false);
+  // MFA gate
+  const [mfaState, setMfaState] = useState('loading'); // loading | needed | passed
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaBusy, setMfaBusy] = useState(false);
+  const [mfaErr, setMfaErr] = useState('');
 
   const loadProfile = useCallback(async (uid) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
@@ -125,6 +131,29 @@ export default function AdminApp() {
 
   useEffect(() => { if (user) setChecking(false); }, [user]);
 
+  // MFA check on admin login
+  useEffect(() => {
+    if (!user || !profile || profile.role !== 'admin') return;
+    const cached = Number(sessionStorage.getItem('jc2fa') || 0);
+    if (Date.now() - cached < 30 * 60 * 1000) { setMfaState('passed'); return; }
+    supabase.rpc('mfa_status').then((d) => {
+      if (d.data?.enabled) setMfaState('needed');
+      else setMfaState('passed');
+    }).catch(() => setMfaState('passed'));
+  }, [user, profile]);
+
+  async function verifyMfa() {
+    if (mfaCode.length !== 6) { setMfaErr('6 digits daalo'); return; }
+    setMfaBusy(true); setMfaErr('');
+    const { data, error } = await supabase.rpc('mfa_verify', { p_code: mfaCode });
+    setMfaBusy(false);
+    if (error) { setMfaErr(error.message); sfx.error(); return; }
+    sessionStorage.setItem('jc2fa', String(Date.now()));
+    setMfaState('passed');
+    sfx.cash();
+    toast('2FA verified — session 30 min', 'success');
+  }
+
   useEffect(() => {
     const on = (e) => setSection(e.detail);
     window.addEventListener('jc:goto', on);
@@ -134,7 +163,39 @@ export default function AdminApp() {
   if (checking) return <div className="loading-screen"><div className="spinner"></div><div>Verifying admin access…</div></div>;
   if (!user || !profile || profile.role !== 'admin') return <AdminLogin />;
 
+  // MFA gate screen
+  if (profile.role === 'admin' && mfaState === 'needed') {
+    return (
+      <div className="auth-wrap">
+        <Toasts />
+        <div className="auth-card" style={{ maxWidth: 380 }}>
+          <div className="card" style={{ padding: 26, textAlign: 'center' }}>
+            <div style={{ width: 58, height: 58, borderRadius: 16, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(46,230,168,0.12)', color: 'var(--success)' }}>
+              <Ic n="shieldCheck" s={30} />
+            </div>
+            <div style={{ fontWeight: 900, fontSize: '1.1rem', marginBottom: 6 }}>Two-Factor Authentication</div>
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.84rem', lineHeight: 1.5, marginBottom: 16 }}>
+              Apne authenticator app (Google Authenticator / Aegis) mein current 6-digit code daalo.
+            </p>
+            <input className="input" style={{ textAlign: 'center', letterSpacing: 8, fontSize: '1.3rem', fontWeight: 900 }}
+              inputMode="numeric" maxLength={6} placeholder="••••••" value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+              onKeyDown={(e) => e.key === 'Enter' && verifyMfa()} autoFocus />
+            {mfaErr && <div style={{ color: 'var(--danger)', fontSize: '0.8rem', marginTop: 8, fontWeight: 700 }}>{mfaErr}</div>}
+            <button className="btn btn-primary btn-block" style={{ marginTop: 14 }} onClick={verifyMfa} disabled={mfaBusy || mfaCode.length !== 6}>
+              <Ic n="lock" s={15} />{mfaBusy ? 'Verifying…' : 'Verify & Continue'}
+            </button>
+            <a href="#/" style={{ display: 'inline-block', marginTop: 14, fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+              <Ic n="arrowLeft" s={12} /> Back
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const sec = SECTIONS.find((s) => s.id === section);
+  const mfaOn = mfaState === 'passed' && Number(sessionStorage.getItem('jc2fa') || 0) > 0;
 
   const renderSection = () => {
     switch (section) {
@@ -163,6 +224,7 @@ export default function AdminApp() {
       case 'sounds': return <SoundsSection />;
       case 'links': return <LinksSection />;
       case 'contact': return <ContactSection />;
+      case 'security': return <SecuritySection />;
       default: return <Dashboard profile={profile} />;
     }
   };
@@ -199,6 +261,9 @@ export default function AdminApp() {
           <button className="icon-btn admin-menu-btn" onClick={() => setDrawer(true)}><Ic n="menu" s={18} /></button>
           <h1><Ic n={sec?.ico} s={24} />{sec?.label}</h1>
           <div className="spacer"></div>
+          <button className="badge badge-pending" style={{ cursor: 'pointer' }} onClick={() => setSection('security')} title="2FA status — click to manage">
+            <Ic n="shieldCheck" s={12} />2FA {mfaOn ? 'ON' : '…'}
+          </button>
           <span className="badge badge-active"><Ic n="user" s={12} />{profile.email}</span>
         </div>
         <div className="page-enter" key={section}>

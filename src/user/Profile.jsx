@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, rpc } from '../lib/supabase.js';
-import { toast, Field, StatCard, RankBadge } from '../components/ui.jsx';
+import { toast, Field, StatCard, RankBadge, Toggle } from '../components/ui.jsx';
 import { Ic, RANK_ICONS } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { money, fmtDT, copyText } from '../lib/utils.js';
@@ -61,6 +61,25 @@ export default function Profile({ game, profile, user, onProfile, features }) {
     }
     const ok = await copyText(refLink);
     toast(ok ? 'Referral link copied' : 'Copy failed', ok ? 'success' : 'error');
+  }
+
+  async function toggleExclusion() {
+    setBusy(true);
+    const { data, error } = await rpc('toggle_self_exclusion');
+    setBusy(false);
+    if (error) { sfx.error(); toast(error.message, 'error'); return; }
+    sfx.click();
+    toast(data.self_excluded ? 'Self-Exclusion ON — betting/withdraw band' : 'Self-Exclusion OFF — welcome back', 'info');
+    onProfile({ ...profile, self_excluded: data.self_excluded });
+  }
+
+  async function requestDeletion() {
+    setBusy(true);
+    const { error } = await rpc('request_deletion', { p_confirmed: true });
+    setBusy(false);
+    if (error) { sfx.error(); toast(error.message, 'error'); return; }
+    sfx.cash();
+    toast('Deletion request submitted — admin review karega', 'info');
   }
 
   const thresholds = refd?.thresholds || [];
@@ -150,6 +169,46 @@ export default function Profile({ game, profile, user, onProfile, features }) {
       </div>
       <div className="card-sub" style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
         <Ic n="calendar" s={12} />Member since {fmtDT(profile.created_at)}
+      </div>
+
+      {/* Self-exclusion notice */}
+      {profile.self_excluded && (
+        <div className="card" style={{ marginTop: 12, borderColor: 'rgba(255,200,87,0.5)', background: 'linear-gradient(135deg, rgba(255,200,87,0.1), transparent)' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <Ic n="pause" s={20} style={{ color: 'var(--warning)', flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <div style={{ fontWeight: 900, color: 'var(--warning)' }}>Self-Exclusion Active</div>
+              <p className="card-sub">Betting, deposits aur withdrawals band hain. Neeche toggle se OFF kar sakte ho (ya Support se help lo).</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Responsible Play */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div className="card-title"><Ic n="shield" s={17} />Responsible Play</div>
+        <div className="setting-row">
+          <div>
+            <div className="s-label">Self-Exclusion (Take a break)</div>
+            <div className="s-desc">Betting/deposit/withdraw turant band — jab bhi chaho OFF karo</div>
+          </div>
+          <Toggle checked={!!profile.self_excluded} onChange={toggleExclusion} disabled={busy} />
+        </div>
+        <div className="setting-row">
+          <div>
+            <div className="s-label">Request Account Deletion</div>
+            <div className="s-desc">Admin review karega. Balance zero nahi hoga jab tak review complete na ho.</div>
+          </div>
+          {!profile.deletion_requested ? (
+            <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => {
+              if (window.confirm('Account deletion request submit karo? (Balance safe rahega review tak)')) requestDeletion();
+            }} disabled={busy}>
+              <Ic n="trash" s={13} />Request
+            </button>
+          ) : (
+            <span className="badge badge-pending">Requested</span>
+          )}
+        </div>
       </div>
 
       {/* Contact */}

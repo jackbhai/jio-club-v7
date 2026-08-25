@@ -86,7 +86,11 @@ export default function Users() {
         <Table headers={['Email', 'Balance', 'Rank', 'Status', 'Ref Code', 'Team', 'Deposits', 'Won', 'Joined', 'Actions']}>
           {list.map((u) => (
             <tr key={u.id}>
-              <td><b>{u.email}</b></td>
+              <td>
+                <b>{u.email}</b>
+                {u.self_excluded && <div><span className="badge badge-pending" style={{ marginTop: 3 }}><Ic n="pause" s={10} />self-excluded</span></div>}
+                {u.deletion_requested && <div><span className="badge badge-rejected" style={{ marginTop: 3 }}><Ic n="trash" s={10} />deletion requested</span></div>}
+              </td>
               <td style={{ fontWeight: 800 }}>{money(u.balance)}</td>
               <td><RankBadge rank={u.rank} small /></td>
               <td><span className={`badge badge-${u.status}`}>{u.status}</span></td>
