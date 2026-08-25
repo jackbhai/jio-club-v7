@@ -1,209 +1,176 @@
-# JIO CLUB v7 — Secure Supabase Edition (Premium)
+# JIO CLUB v7 — Secure Supabase Edition
 
 **React + Vite + Supabase + GitHub Pages** — poora game engine **server-side** (Postgres + pg_cron),
-database **RLS se locked**, admin panel **14 sections / 300+ controls** with **Win Probability Engine**
-(Random / Weighted / Target Win-Rate), premium icon-based UI (zero emoji), referral = **link + rank (koi cash nahi)**.
+database **Row Level Security** se locked, 25-section admin panel with **Win Probability Engine**
+(Random / Weighted / Target Win-Rate), premium icon-based UI (zero emoji, light+dark themes),
+referral = **link + rank only (koi cash reward nahi)**.
 
 ---
 
-## ⚡ Yeh project kya hai
+## Live Site
+
+| | URL |
+|---|---|
+| **User panel** | https://jackbhai.github.io/jio-club-v7/ |
+| **Admin panel** | https://jackbhai.github.io/jio-club-v7/#/admin |
+| **GitHub repo** | github.com/jackbhai/jio-club-v7 (auto-deploy on every push) |
+| **Database** | Supabase project `eavqngjhvrpxavvcqvvi` (region ap-south-1, Postgres 17) |
+
+Admin login: admin email + password (Supabase Auth) + optional 2FA (TOTP, admin panel se enable).
+
+---
+
+## Architecture
 
 ```
 Browser (React app, GitHub Pages - FREE)
-   │  sirf yeh kar sakta hai: login, bet request, deposit request, apna data padhna
-   ▼
+   |  sirf yeh kar sakta hai: login, bet request, deposit request, apna data padhna
+   v
 Supabase Postgres (FREE tier: 500MB, 50k MAU)
-   ├─ RLS: user sirf APNA data dekh/likh sakta hai
-   ├─ SQL functions: place_bet, settle, withdraw — SAB server-side, atomic
-   └─ pg_cron: har minute game engine chalta hai (result generate + settle)
+   |- RLS: user sirf APNA data dekh/likh sakta hai; admin RLS policies se
+   |- SQL functions (SECURITY DEFINER, EXECUTE locked): place_bet, tick_game,
+   |  settle_period, pick_result, admin_action, razorpay_credit ...
+   |- pg_cron "game-tick": har minute result + settlement (server-side)
+   `- Edge Function "razorpay-pay": order create + HMAC verify + atomic credit
 ```
 
-**Purane (Firebase) version ke problems ka solution:**
-
-| Purani problem | v7 mein |
-|---|---|
-| Result user ke browser mein banta tha (cheat possible) | Server (pg_cron) result banata hai, client sirf dikhata hai |
-| Balance browser se set ho sakta tha | RLS: user balance column pe write hi nahi kar sakta |
-| Admin password public tha (`admin@123`) | Real Supabase Auth + `role='admin'` DB check |
-| Razorpay client-side "verify" (fake possible) | Test-mode pending flow / sirf UPI manual |
-| Poora DB public tha | Har table pe Row Level Security |
+**Sab kuch server-side hai.** Browser me balance, result, ya payout change karne ka
+koi raasta nahi — rules RLS + locked SQL functions me hain (console se tamper-proof).
 
 ---
 
-## 🚀 15-MINUTE SETUP (step by step)
+## Features (current)
 
-### STEP 1 — Database ready karo (Supabase) — ~5 min
+### User panel
+- 60s Wingo-style periods: Green/Red/Violet + Big/Small + Number bets
+- Wallet: UPI deposit (QR + screenshot + UTR), withdrawal requests, coupons, full ledger
+- Game: live timer ring, 5-4-3-2-1 countdown, win/lose animations, sound effects
+  (per-user volume slider + sound on/off, device pe save)
+- MyBets with stats + filters, bet receipts, report-issue on any bet
+- Live community chat, announcements, notifications (bell + ntfy push alerts)
+- Referral: link + code, team count, rank progression (bronze to diamond) — **no cash**
+- **Profile: Links directory cards** (Telegram/WhatsApp/etc — admin se manage)
+- PWA install, Hindi/English (user panel), light/dark themes
+- Responsible play: self-exclusion toggle, account deletion request
+- Multi-bet control (admin se limit: `betsPerPeriod`), daily bet/deposit limits (server enforced)
 
-1. `https://supabase.com/dashboard` pe apne project **`eavqngjhvrpxavvcqvvi`** kholo
-2. Left menu → **SQL Editor** → **New query**
-3. Is repo ka file: **`supabase/schema.sql`** — poora copy karo
-4. Paste karo → **Run** (green button)
-5. Koi error aaye toh screenshot leke mujhe bhejo. Success pe 20+ tables/functions ban jaayenge
+### Admin panel (25 sections)
+- **Main:** Dashboard (stats + quick game pause/maintenance), Users (search/CSV/balance adjust/rank/block/delete/detail view)
+- **Game Engine:** Game Control (win-probability engine + force + settle-now), Results, Bets
+- **Money:** Deposits, Withdrawals, Coupons, Wallet Ledger (full audit of every balance change)
+- **Growth:** Referrals & Ranks (thresholds, recompute, leaderboard)
+- **Support:** Support Inbox (private user chats), Chat Moderation, Announcements + Broadcast
+- **Insights:** Analytics (win-rate, 14-day trend, distribution heat, top winners/depositors), Admin Logs
+- **Settings (1:1 user-panel control):** Features, Payouts, Wallet, UPI Accounts (multi),
+  Payments/Razorpay (test+live keys), Community, **Branding** (app name, logo upload, monogram,
+  colors, favicon — live preview), Sounds, **Links Directory**, Contact & About, **Security/2FA**
 
-> ⚠️ Yeh script purane test tables (users, bets, deposits v5 wale) **drop** karke naya schema banati hai.
-> Purana data sirf test tha (aur woh exposed tha) — isliye fresh start best hai.
+**Toggles instantly save** — flip karte hi live (realtime user panel me reflect).
 
-### STEP 2 — Admin banao — ~2 min
-
-1. Deploy hone ke baad (STEP 4 tak) `yoursite.netlify… /admin` nahi — `yoursite.github.io/repo/#/admin` kholo
-2. Apna **admin account sign up** karo (koi bhi email, e.g. `admin@yoursite.com`)
-3. Wapas Supabase → **SQL Editor** mein ek line chalao:
-   ```sql
-   update public.profiles set role='admin' where email='YOUR_ADMIN_EMAIL';
-   ```
-4. Ab `#/admin` pe login karo → **admin panel khul jayega** ✅
-
-### STEP 3 — Supabase ke chhote checks — ~2 min
-
-1. **Dashboard → Database → Extensions** → `pg_cron` enabled dikhe (schema.sql khud enable karti hai;
-   agar error aaya ho toh wahan se enable karo aur sirf schema.sql ke **last 8 lines** (cron part) dobara run karo)
-2. **Storage** → `screenshots` bucket hona chahiye (public) — schema banati hai
-3. **Auth → Users** — sign up ke baad wahan aap dikhenge
-
-### STEP 4 — GitHub Pages deploy — MAIN KARUNGA (aapko sirf 1 token banana hai, ~2 min)
-
-**Recommended:** Aap ek **Personal Access Token (classic)** banao aur mujhe do — main khud:
-repo banaunga → files push karunga → Pages enable karunga → live link doonga.
-
-**Token banane ke 4 steps** (github.com pe logged in):
-1. Upar-right **avatar → Settings**
-2. Left menu sabse neeche **Developer settings** → **Personal access tokens → Tokens (classic)**
-3. **Generate new token** → label: `deploy` → expiry: 30 days → sirf **`repo`** permission tick karo → **Generate token**
-4. Bani hui `ghp_…` string **copy karke mujhe bhej do** (main use karke deploy karunga, baad mein aap usse revoke kar lena — 1 click)
-
-**Manual fallback** (agar token nahi dena):
-1. `github.com` pe **@Pranshu1** → **New repository** → name: **`jio-club-v7`** → **Public** → Create
-2. Repo page pe **"uploading an existing file"** → is zip ka `jio-club-v7` folder ka SAARA content (node_modules/dist bina) drag-drop → **Commit changes**
-3. 1-2 min mein **Actions** tab mein "Deploy to GitHub Pages" green ho jayega
-4. Link: `https://Pranshu1.github.io/jio-club-v7/` · Admin: `https://Pranshu1.github.io/jio-club-v7/#/admin`
-
-### STEP 5 — Pehli checks — ~1 min
-
-1. Site kholo → **Sign Up** karo → game screen aayegi
-2. ~1 minute mein **pehla result** aa jayega (pg_cron har minute settle karta hai)
-3. Bet lagao (balance 0 hai toh pehle admin se ya welcome bonus se)
-4. Admin panel mein sab sections kholein — Dashboard pe stats aayenge
-
----
-
-## 🔁 Game kaise chalta hai (engine)
-
-1. **Har 60s ka period** hai (admin change kar sakta hai: 30/60/120/300)
-2. Period khatam → `pg_cron` → `tick_game()` → **`pick_result()`** (probability engine) → `settle_period()`:
-   - saari pending bets settle → winners ka paisa **atomic** update se balance mein
-3. Client (aapki browser) sirf: bet request bhejta hai, results **realtime** receive karta hai
-4. **Force Result**: Admin → Results / Game Control → number pick → agla period fixed (ek period ke liye)
-5. **Settle Now**: Admin trigger se pending period turant resolve
-
-**WIN PROBABILITY ENGINE** (Admin → Game Control — poora game aapke control mein):
+### Game engine
 - **Pure Random** — har number 10% (100% fair)
-- **Weighted Numbers** — 0-9 har number ka apna weight (0-100); colors/size/number odds directly control
-- **Target Win-Rate** — slider 0-100%: engine us period ke pending bets dekh kar wahi number chunta hai
-  jisme ~X% ki bet value jeete (period-by-period, server-side)
-- Live probability preview + force result + settle-now + duration/limits — sab ek section mein
-
-**Game rules (original wahi):** 0 = Red+Violet, even = Red, odd = Green, 0-4 Small, 5-9 Big.
-Payouts default: Green ×2, Red ×2, Violet ×4.5, Number ×9, Size ×2 — admin se change karo.
-
----
-
-## 🛡️ Security checklist (jo ban gaya)
-
-- ✅ Row Level Security har table pe — user apna hi data
-- ✅ Balance/withdraw/bet logic sirf SQL (definer functions) mein — browser se touch impossible
-- ✅ Admin = `role='admin'` + Supabase Auth — koi hardcoded password nahi
-- ✅ Service role key kahin bhi code mein NAHI hai
-- ✅ Screenshot uploads Supabase Storage mein (bucket policy se restricted)
-- ✅ Admin ka har action `admin_logs` mein record
-- ✅ Referral cash-free (sirf rank) — legal risk kam
-- ✅ Console hardening: minified bundle, `window` pe koi bhi global handle nahi;
-  paisa/system tab tak safe jab tak rules server-side (RLS + definer SQL) hain —
-  browser console se balance/bet/result change karna server level pe blocked hai
-
-**Aapko karna hai (production se pehle):**
-- [ ] Supabase dashboard → **Project Settings → API** → service_role key **regenerate** karo
-      (chat mein paste hui thi — safe habit)
-- [ ] Auth settings mein **email confirmation** off karo agar turant play chahiye
-      (Settings → Auth → Providers → Email → "Confirm email" OFF)
-- [ ] Domain buy karke GitHub Pages mein point karo (₹800-900/saal)
+- **Weighted Numbers** — 0-9 har number ka apna weight (0-100)
+- **Target Win-Rate** — 0-100%: engine us period ke pending bets dekh ke wahi result
+  chunta hai jisme ~X% ki bet value jeete (server-side, period-by-period)
+- Force next result (0-9), Settle Now, duration/betClose/min/max controls, live probability preview
+- Rules: 0 = Red+Violet, even = Red, odd = Green, 0-4 Small, 5-9 Big
+- Default payouts: Green x2, Red x2, Violet x4.5, Number x9, Size x2 (admin se change)
 
 ---
 
-## 📦 Repo structure
+## Security (applied + verified)
+
+- RLS har table pe; user apna hi data
+- Privileged RPCs (`settle_period`, `pick_result`, `tick_game`, `admin_action`, etc.)
+  se `anon`/`authenticated` ka EXECUTE **revoke** — sirf service_role call kar sakta hai
+  (live pe verified: public calls rejected)
+- Internal `current_user` guards on cron-invoked functions (defense-in-depth)
+- `razorpay_credit` — atomic + idempotent (payment_id de-dup, advisory lock):
+  double-deposit / replay / race condition safe
+- Razorpay server-side HMAC verify (edge function), client-side verify kabhi nahi
+- Admin 2FA (TOTP) server-side; admin ka har action `admin_logs` me
+- `admin_action` me `uuid` type-cast fix (rank/role/delete/notify)
+- Service-role key / management tokens repo me **nahi** hain; sirf publishable (public) key
+- URL scheme validation trigger on public_links (javascript:/data: blocked)
+
+**Rotation reminder (best practice):** chat me share hue tokens (GitHub PAT, Supabase
+management token, service_role key) baad me regenerate kar lena:
+- GitHub: github.com/settings/tokens -> Revoke
+- Supabase: Dashboard -> Project Settings -> API -> Regenerate / service_role regenerate
+
+---
+
+## Changelog (recent)
+
+| Ver | Change |
+|---|---|
+| v7.6 | Toggle double-fire bug fixed (value do baar flip hoti thi) — saare toggles single-fire + instant save |
+| v7.5 | Admin set-rank / delete-user safe REST path + self/admin delete guards + audit log |
+| v7.4 | Profile me Links cards; per-user volume slider + sound persistence; instant-save admin toggles; `admin_action` uuid=text DB patch |
+| v7.3 | Security hardening: privileged RPCs lock, atomic `razorpay_credit`, audit report |
+| v7.2 | Full site branding control (name, logo, monogram, colors, favicon, live preview) |
+| v7.1 | Bet receipts, report issue, Hindi/English, PWA, suspicious accounts, ntfy push, i18n |
+| v7.0 | One-way admin chat, ledger backfill, multi-bet control, multi-UPI, private support, links directory, wallet ledger, Razorpay dual keys, self-exclusion, 2FA |
+
+---
+
+## Repo structure
 
 ```
 jio-club-v7/
-├── .github/workflows/deploy.yml   # GitHub Actions → Pages auto deploy
-├── index.html, vite.config.js     # build (base './' → subpath safe)
-├── package.json
-├── public/manifest.json           # PWA
-├── supabase/schema.sql            # ⭐ DB + RLS + game engine + cron (STEP 1)
+├── .github/workflows/deploy.yml   # GitHub Actions -> Pages auto deploy (on push)
+├── index.html, vite.config.js     # build (base './' -> subpath safe)
+├── package.json, package-lock.json
+├── SECURITY_AUDIT_REPORT.md
+├── public/                        # PWA manifest, icons
+├── supabase/
+│   ├── schema.sql                 # full baseline schema + RLS + engine + hardening
+│   ├── patch1..7.sql              # incremental patches (live DB par applied)
+│   ├── patch_atomic_razorpay.sql  # atomic razorpay_credit RPC
+│   ├── patch_admin_action_uuid_fix.sql  # uuid=text fix (applied)
+│   ├── security_hardening.sql     # EXECUTE revokes + current_user guards
+│   └── functions/razorpay-pay/    # edge function (v4 live: atomic credit)
 └── src/
-    ├── config.js                  # ⭐ AAPKA CONFIG (URL + publishable key — dono public hain)
-    ├── App.jsx, main.jsx
-    ├── lib/ (supabase, sound, theme, utils)
-    ├── components/ui.jsx          # Modal, Toast, Table, Toggle…
-    ├── styles/global.css          # ⭐ Design system — light/dark themes + animations
-    ├── user/                      # User panel
-    │   ├── UserApp.jsx            # shell: topbar, bottom nav, realtime
-    │   ├── Auth.jsx               # login / signup / forgot (+referral code)
-    │   ├── Game.jsx               # ⭐ game: timer ring, bets, results, win/lose animation
-    │   ├── Wallet.jsx             # deposit (UPI+QR / Razorpay test), withdraw, coupon, history
-    │   ├── MyBets.jsx             # stats + filters
-    │   ├── Chat.jsx               # live community chat
-    │   └── Profile.jsx            # rank, referral link+share, stats, settings, logout
-    └── admin/
-        ├── AdminApp.jsx           # shell: login gate (role check) + 14-section sidebar
-        └── sections/              # Dashboard, Users, Deposits, Withdrawals, Bets, Results,
-                                   # Coupons, Referrals, Chat, Announcements, Analytics,
-                                   # Logs, Settings (10 tabs, ~60 controls)
+    ├── config.js                  # Supabase URL + publishable key (dono public hain)
+    ├── lib/                       # supabase client, sound engine, i18n, icons, theme
+    ├── components/                # UI kit (Toggle, Modal, Table, Toast, RankBadge, Brand)
+    ├── styles/                    # design system: light/dark themes, animations
+    ├── user/                      # UserApp, Auth, Game, Wallet, MyBets, Chat, Support, Profile
+    └── admin/                     # AdminApp + 25 sections
 ```
 
 ---
 
-## 📊 Admin Features Count (250+)
+## Fresh setup (agar naye project me banani ho)
 
-| Section | Controls |
-|---|---|
-| **Game Control** | 3 probability modes + target slider + 10 number-weight sliders + equal-reset + live prob preview(6) + force 0-9(10) + clear + settle-now + duration(4) + close/min/max + saves(2) = **~38** |
-| Dashboard | 8 stat cards + game pause/resume + maintenance + pending queues + refresh = **12** |
-| Users | search, refresh, export CSV, view, ±balance(+reason), set rank(5), block/unblock, delete, stats(4) = **~15** |
-| Deposits | 4 status tabs, search, export, bulk approve, approve, reject(+reason), delete, screenshot view = **~12** |
-| Withdrawals | 4 tabs, search, export, mark-paid, reject+refund(+reason), delete = **~10** |
-| Bets | 4 result tabs, type filter, period/uid search, refresh, export, stats(4) = **~12** |
-| Results | force 0-9 (10), clear/restore random, search, refresh, grid = **~15** |
-| Coupons | create (6 fields), toggle, delete, refresh, table = **~12** |
-| Referrals & Ranks | enable toggle, 5 thresholds, save, recompute, leaderboard(50), stats(4) = **~15** |
-| Chat Moderation | refresh, delete msg, clear all, full feed = **~6** |
-| Announcements & Broadcast | create(4 fields), publish, edit, toggle, delete, broadcast(2) = **~10** |
-| Analytics | win rate, 14-day strip, type dist, color/size/number heat, top winners, top depositors = **~12** |
-| Logs | search, refresh, full audit = **~4** |
-| Settings | 10 tabs: **features(4 = 1:1 user-panel control)** + payouts(5) + wallet(4) + upi(2) + payments(2) + referral(6) + community(3) + appearance(3) + sounds(5) + contact(3) + save buttons(10) = **~47** |
-| **TOTAL** | **≈ 315 individual admin controls/actions** ✅ |
+1. Supabase project banao -> **SQL Editor** me `supabase/schema.sql` run karo
+   (idempotent hai), phir `patch1..7.sql`, `patch_atomic_razorpay.sql`,
+   `patch_admin_action_uuid_fix.sql` order me run karo
+2. `src/config.js` me apna Supabase URL + publishable key daalo
+3. GitHub repo push karo (Actions auto-deploy karta hai) -> Pages enable
+4. Site pe sign up karo, phir ek line:
+   `update public.profiles set role='admin' where email='AAPKA_EMAIL';`
+5. Cron job `game-tick` auto-ban jata hai; pehla result 1 minute me aayega
 
----
-
-## 💰 Free → Paid upgrade path
+## Free -> Paid upgrade path
 
 | Abhi (FREE) | Jab upgrade karein | Cost |
 |---|---|---|
-| GitHub Pages (frontend) | kabhi nahi — hamesha free | ₹0 |
-| Supabase free: 500MB DB, 50k MAU, realtime | **Supabase Pro** — 50k+ users ya 500MB se upar | $25/mahine (~₹2,085) |
-| — | Domain (.in ₹899 / .com ~₹800 saal) — GitHub Settings → Pages mein daalo | ~₹900/saal |
+| GitHub Pages | kabhi nahi — hamesha free | Rs 0 |
+| Supabase free (500MB DB, 50k MAU) | Pro: 50k+ users ya 500MB se upar | $25/mahine |
+| - | Custom domain (.in/.com) — GitHub Settings -> Pages | ~Rs 900/saal |
 
----
-
-## 🧯 Troubleshooting
+## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| "relation does not exist" error | STEP 1 nahi hua ya half hua — schema.sql dobara run karo (idempotent hai) |
-| Result nahi aa raha | Extensions mein `pg_cron` enabled hai? cron job `game-tick` hai? (Database → cron) |
-| Login kaam nahi kar raha | Auth → Email provider ON hai? "Confirm email" OFF hai? |
-| Build fail on Actions | `package.json` + `package-lock` dono upload hue hain? (zip mein dono hain) |
-| 404 on Pages | Settings → Pages → Source = **GitHub Actions** select karo |
-| Balance nahi update hota | Profile realtime ke liye page refresh karo pehli baar; phir auto hoga |
+| "operator does not exist: uuid = text" | `patch_admin_action_uuid_fix.sql` apply karo (live pe already done) |
+| Result nahi aa raha | Supabase cron me `game-tick` active hai? |
+| Toggles "work nahi kar rahe" purane jaisa lagta hai | Hard refresh (Ctrl+Shift+R / cache clear) — naya bundle load karo |
+| Login nahi ho raha | Auth -> Email provider ON, "Confirm email" OFF |
+| 404 on Pages | GitHub repo Settings -> Pages -> Source: GitHub Actions |
+| Sound nahi | Profile -> Sound ON + Volume slider; admin ke global sounds bhi ON hon chahiye |
 
-**Legal note:** Real-money betting India mein state-by-state hai — public launch se pehle
-apne state ka rule check karo. Razorpay gambling ko production mein allow nahi karta (isliye
-UPI manual primary hai). Yeh app aapki zimeedari par chalti hai.
+**Legal note:** Real-money betting India me state-by-state hai — public launch se pehle
+apne state ka rule check karo. Razorpay gambling category production me allow nahi karta
+(isliye UPI manual primary flow hai). Yeh app aapki zimmedari par chalti hai.
