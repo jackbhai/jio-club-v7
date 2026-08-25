@@ -45,7 +45,18 @@ async function getUser(userJwt: string): Promise<string | null> {
 }
 async function getPayments(): Promise<any> {
   const rows = await rest("GET", "/settings?key=eq.payments&select=value") as any[];
+  // NOTE: settings me sirf mode/env/key-ID (key IDs public identifiers hain)
   return rows?.[0]?.value || {};
+}
+// Key SECRETS alag admin-only table me hain (PATCH9: settings public-readable the)
+async function getKeySecrets(): Promise<{ test: string; live: string }> {
+  const rows = await rest("GET", "/payment_keys?select=env,key_secret") as any[];
+  const o: { test: string; live: string } = { test: "", live: "" };
+  (rows || []).forEach((r: any) => {
+    if (r.env === "test") o.test = r.key_secret || "";
+    else o.live = r.key_secret || "";
+  });
+  return o;
 }
 function basicAuth(key: string, secret: string) {
   return "Basic " + btoa(key + ":" + secret);
@@ -65,10 +76,10 @@ Deno.serve(async (req) => {
     if (!uid) return resp({ error: "unauthorized" }, 401);
 
     const payload = await req.json().catch(() => ({}));
-    const pay = await getPayments();
+    const [pay, keys] = await Promise.all([getPayments(), getKeySecrets()]);
     const env = payload.env === "live" && pay.env === "live" ? "live" : "test";
     const key = env === "live" ? pay.liveKeyId : pay.testKeyId;
-    const secret = env === "live" ? pay.liveKeySecret : pay.testKeySecret;
+    const secret = env === "live" ? keys.live : keys.test;
     if (!key || !secret) return resp({ error: "Razorpay " + env + " keys not configured" }, 400);
 
     if (payload.action === "create-order") {

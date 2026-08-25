@@ -254,9 +254,34 @@ export function UpiSection() {
 export function PaymentsSection() {
   const { data, set, save } = useSettings();
   const [confirmLive, setConfirmLive] = useState(false);
-  if (!data) return <div className="spinner"></div>;
+  // Key SECRETS admin-only table me hain (settings public-readable hai)
+  const [secrets, setSecrets] = useState(null);
+  useEffect(() => {
+    supabase.from('payment_keys').select('env, key_secret')
+      .then(({ data: rows }) => {
+        const o = { testKeySecret: '', liveKeySecret: '' };
+        (rows || []).forEach((r) => {
+          if (r.env === 'test') o.testKeySecret = r.key_secret || '';
+          else o.liveKeySecret = r.key_secret || '';
+        });
+        setSecrets(o);
+      }).catch(() => setSecrets({ testKeySecret: '', liveKeySecret: '' }));
+  }, []);
+  if (!data || !secrets) return <div className="spinner"></div>;
   const p = data.payments || {};
   const isLive = p.env === 'live';
+
+  async function saveAll(msg) {
+    const ok1 = await save('payments', msg);
+    if (!ok1) return false;
+    const rows = [
+      { env: 'test', key_secret: secrets.testKeySecret || '' },
+      { env: 'live', key_secret: secrets.liveKeySecret || '' }
+    ];
+    const { error } = await supabase.from('payment_keys').upsert(rows);
+    if (error) { sfx.error(); toast('Secrets save fail: ' + error.message, 'error'); return false; }
+    return true;
+  }
 
   return (
     <Shell icon="card" title="Payments — Razorpay + Mode">
@@ -264,7 +289,7 @@ export function PaymentsSection() {
         <select className="input" style={{ width: 190 }} value={p.mode || 'upi'} onChange={(e) => set('payments', { mode: e.target.value })}>
           <option value="upi">UPI Manual (recommended)</option>
           <option value="razorpay">Razorpay only</option>
-          <option value="both">Both (UPI default)</option>
+          <option value="both">Both (Manual + Razorpay dono dikhe)</option>
         </select>
       </Row>
       <div className="setting-row">
@@ -279,28 +304,28 @@ export function PaymentsSection() {
           <Ic n="wrench" s={13} />TEST KEYS (rzp_test_…)
         </div>
         <Field label="Test Key ID"><input className="input" placeholder="rzp_test_xxxxxxxx" value={p.testKeyId || ''} onChange={(e) => set('payments', { testKeyId: e.target.value })} /></Field>
-        <Field label="Test Key Secret (server verification — client mein nahi jaata)"><input className="input" type="password" placeholder="xxxxxx" value={p.testKeySecret || ''} onChange={(e) => set('payments', { testKeySecret: e.target.value })} /></Field>
+        <Field label="Test Key Secret (server-only — admin table me, client kabhi nahi dekh sakta)"><input className="input" type="password" placeholder="xxxxxx" value={secrets.testKeySecret} onChange={(e) => setSecrets((s) => ({ ...s, testKeySecret: e.target.value }))} /></Field>
       </div>
       <div style={{ borderTop: '1px solid var(--border-solid)', marginTop: 10, paddingTop: 10 }}>
         <div style={{ fontWeight: 800, fontSize: '0.8rem', marginBottom: 8, color: 'var(--danger)', display: 'flex', gap: 6, alignItems: 'center' }}>
           <Ic n="zap" s={13} />LIVE KEYS (rzp_live_…)
         </div>
         <Field label="Live Key ID"><input className="input" placeholder="rzp_live_xxxxxxxx" value={p.liveKeyId || ''} onChange={(e) => set('payments', { liveKeyId: e.target.value })} /></Field>
-        <Field label="Live Key Secret (server verification — client mein nahi jaata)"><input className="input" type="password" placeholder="xxxxxx" value={p.liveKeySecret || ''} onChange={(e) => set('payments', { liveKeySecret: e.target.value })} /></Field>
+        <Field label="Live Key Secret (server-only — admin table me, client kabhi nahi dekh sakta)"><input className="input" type="password" placeholder="xxxxxx" value={secrets.liveKeySecret} onChange={(e) => setSecrets((s) => ({ ...s, liveKeySecret: e.target.value }))} /></Field>
       </div>
       <p className="card-sub" style={{ margin: '10px 0', display: 'flex', gap: 6, alignItems: 'flex-start' }}>
         <Ic n="info" s={14} style={{ marginTop: 2, flexShrink: 0 }} />
         Abhi flow: user pay karta hai → payment ID deposit request mein attach hota hai → aap approve karte ho.
         Full auto-verify (secret se signature check) Edge Function mein Phase 3 mein aayega. Secrets sirf DB mein store hote hain (admin-only).
       </p>
-      <SaveBtn onClick={() => save('payments', 'Payment settings saved')} />
+      <SaveBtn onClick={() => saveAll('Payment settings saved (secrets admin-only table me)')} />
 
       {confirmLive && (
         <Confirm title="Switch to LIVE Razorpay?" icon="zap" danger
           msg="LIVE mode mein REAL paise chalti hain. Confirm karo ki: (1) Razorpay ne aapki business category approve ki hai, (2) Live keys sahi hain, (3) Aapke state mein yeh legal hai."
           yesLabel="Haan, LIVE karo"
           onNo={() => setConfirmLive(false)}
-          onYes={async () => { setConfirmLive(false); await save('payments', 'Razorpay → LIVE'); }} />
+          onYes={async () => { setConfirmLive(false); await saveAll('Razorpay → LIVE'); }} />
       )}
     </Shell>
   );

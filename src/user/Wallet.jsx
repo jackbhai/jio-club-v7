@@ -50,6 +50,9 @@ export default function Wallet({ game, profile, user, features }) {
   // Razorpay env (admin toggle: test/live)
   const rzpEnv = payments.env === 'live' ? 'live' : 'test';
   const rzpKeyId = rzpEnv === 'live' ? payments.liveKeyId : payments.testKeyId;
+  // Mode logic: 'upi' | 'razorpay' | 'both'
+  const rzpShow = !!rzpKeyId && (payments.mode === 'razorpay' || payments.mode === 'both');
+  const showManual = payments.mode !== 'razorpay';
 
   useEffect(() => { setUpiId(profile?.upi_id || ''); }, [profile?.upi_id]);
 
@@ -231,11 +234,17 @@ export default function Wallet({ game, profile, user, features }) {
                   ))}
                 </div>
 
-                {payments.mode === 'razorpay' && rzpKeyId ? (
+                {rzpShow && (
                   <button className="btn btn-primary btn-block" onClick={onRazorpay} disabled={busy || amt <= 0}>
                     <Ic n="zap" s={16} />{busy ? 'Please wait…' : `Pay Now with Razorpay (${rzpEnv === 'live' ? 'LIVE' : 'test mode'})`}
                   </button>
-                ) : (
+                )}
+                {rzpShow && showManual && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '2px 0 14px', color: 'var(--text-dim)', fontSize: '0.68rem', fontWeight: 800, letterSpacing: 1 }}>
+                    <div style={{ flex: 1, height: 1, background: 'var(--border-solid)' }} />YA UPI SE PAY KARO<div style={{ flex: 1, height: 1, background: 'var(--border-solid)' }} />
+                  </div>
+                )}
+                {showManual && (
                   <>
                     {amt > 0 && !depositValid && (
                       <div className="betting-closed" style={{ marginBottom: 12 }}>
