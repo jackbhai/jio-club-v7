@@ -109,31 +109,16 @@ Deno.serve(async (req) => {
       const amount = (oj?.amount ?? 0) / 100;
       if (amount <= 0) return resp({ error: "order amount invalid" }, 400);
 
-      const profs = await rest("GET", "/profiles?id=eq." + uid + "&select=balance,total_deposits") as any[];
-      const prof = profs?.[0];
-      if (!prof) return resp({ error: "user not found" }, 404);
-      const newBal = Math.round((Number(prof.balance) + amount) * 100) / 100;
-
-      const dep = (await rest("POST", "/deposits", {
-        uid, amount, upi_ref: payload.payment_id,
-        payment_mode: "razorpay", status: "approved",
-        processed_at: new Date().toISOString(),
-        note: "razorpay auto-verified (" + env + ")"
+      // ATOMIC + idempotent credit via a single server-side RPC (no read-then-write race,
+      // replay-safe by payment_id). Replaces the previous read-then-write race.
+      const cred = (await rest("POST", "/rpc/razorpay_credit", {
+        p_uid: uid, p_amount: amount, p_payment_id: payload.payment_id
       })) as any;
-      const depId = dep?.[0]?.id;
-
-      await rest("PATCH", "/profiles?id=eq." + uid, {
-        balance: newBal,
-        total_deposits: Math.round((Number(prof.total_deposits || 0) + amount) * 100) / 100
-      });
-      await rest("POST", "/wallet_ledger", {
-        uid, type: "deposit", amount, balance_after: newBal,
-        ref: "DEP-" + depId, note: "razorpay auto-verified"
-      });
-      await rest("POST", "/notifications", {
-        uid, title: "Deposit Approved", body: "₹" + amount + " (Razorpay, auto-verified) added to your wallet."
-      });
-      return resp({ ok: true, amount, balance: newBal, receipt: "DEP-" + depId });
+      if (cred?.[0] && cred?.[0].ok === false) {
+        return resp({ error: cred[0].message || "credit failed" }, 400);
+      }
+      const credRow = Array.isArray(cred) ? cred[0] : cred;
+      return resp({ ok: true, amount, balance: credRow?.balance, receipt: credRow?.receipt, already: !!credRow?.already });
     }
 
     return resp({ error: "unknown action" }, 400);
