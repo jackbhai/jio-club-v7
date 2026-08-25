@@ -20,7 +20,7 @@ import SupportInbox from './sections/SupportInbox.jsx';
 import {
   FeaturesSection, PayoutsSection, WalletSection, UpiSection,
   PaymentsSection, CommunitySection, AppearanceSection, SoundsSection,
-  LinksSection, ContactSection, SecuritySection
+  LinksSection, ContactSection, SecuritySection, BrandingSection
 } from './sections/AdminSettings.jsx';
 import { ChatSection, AnnouncementsSection } from './sections/Community.jsx';
 import Analytics from './sections/Analytics.jsx';

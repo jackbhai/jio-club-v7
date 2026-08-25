@@ -123,7 +123,7 @@ export function StatCard({ label, value, sub, tone = '', icon }) {
 export function RankBadge({ rank, small }) {
   const m = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold', platinum: 'Platinum', diamond: 'Diamond' }[rank] || 'Bronze';
   return (
-    <span className={`rank-badge rank-${rank || 'bronze'}`} style={small ? { fontSize: '0.66rem', padding: '2px 8px' } : ''}>
+    <span className={`rank-badge rank-${rank || 'bronze'}`} style={small ? { fontSize: '0.66rem', padding: '2px 8px' } : undefined}>
       <Ic n={RANK_ICONS[rank] || 'medal'} s={small ? 11 : 13} /> {m}
     </span>
   );
