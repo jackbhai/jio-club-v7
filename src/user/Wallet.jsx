@@ -133,11 +133,10 @@ export default function Wallet({ game, profile, user, features }) {
               body: { action: 'verify', order_id: ord.order_id, payment_id: resp.razorpay_payment_id, signature: resp.razorpay_signature }
             });
             if (verErr || ver?.error) {
-              // fallback: pending deposit (manual admin approval)
-              const { error } = await supabase.from('deposits').insert({
-                uid: user.id, amount: amt, upi_ref: resp.razorpay_payment_id || '',
-                payment_mode: 'razorpay', status: 'pending',
-                note: 'auto-verify failed — manual review'
+              // fallback: pending deposit (manual admin approval) — abh sirf
+              // request_deposit() RPC se (direct INSERT RLS se locked hai)
+              const { error } = await rpc('request_deposit', {
+                p_amount: amt, p_upi_ref: resp.razorpay_payment_id || 'manual', p_screenshot_url: ''
               });
               if (error) throw new Error(error.message);
               toast('Payment recorded — pending admin approval', 'info');
