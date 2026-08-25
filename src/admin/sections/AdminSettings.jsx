@@ -254,18 +254,18 @@ export function UpiSection() {
 export function PaymentsSection() {
   const { data, set, save } = useSettings();
   const [confirmLive, setConfirmLive] = useState(false);
-  // Key SECRETS admin-only table me hain (settings public-readable hai)
+  // Key SECRETS admin-only `secrets` table me hain (secret_get/secret_set RPC se)
   const [secrets, setSecrets] = useState(null);
   useEffect(() => {
-    supabase.from('payment_keys').select('env, key_secret')
-      .then(({ data: rows }) => {
-        const o = { testKeySecret: '', liveKeySecret: '' };
-        (rows || []).forEach((r) => {
-          if (r.env === 'test') o.testKeySecret = r.key_secret || '';
-          else o.liveKeySecret = r.key_secret || '';
-        });
-        setSecrets(o);
-      }).catch(() => setSecrets({ testKeySecret: '', liveKeySecret: '' }));
+    (async () => {
+      try {
+        const [t, l] = await Promise.all([
+          rpc('secret_get', { p_key: 'razorpay_test_key_secret' }),
+          rpc('secret_get', { p_key: 'razorpay_live_key_secret' })
+        ]);
+        setSecrets({ testKeySecret: t || '', liveKeySecret: l || '' });
+      } catch (e) { setSecrets({ testKeySecret: '', liveKeySecret: '' }); }
+    })();
   }, []);
   if (!data || !secrets) return <div className="spinner"></div>;
   const p = data.payments || {};
@@ -274,12 +274,10 @@ export function PaymentsSection() {
   async function saveAll(msg) {
     const ok1 = await save('payments', msg);
     if (!ok1) return false;
-    const rows = [
-      { env: 'test', key_secret: secrets.testKeySecret || '' },
-      { env: 'live', key_secret: secrets.liveKeySecret || '' }
-    ];
-    const { error } = await supabase.from('payment_keys').upsert(rows);
-    if (error) { sfx.error(); toast('Secrets save fail: ' + error.message, 'error'); return false; }
+    try {
+      await rpc('secret_set', { p_key: 'razorpay_test_key_secret', p_value: secrets.testKeySecret || '' });
+      await rpc('secret_set', { p_key: 'razorpay_live_key_secret', p_value: secrets.liveKeySecret || '' });
+    } catch (e) { sfx.error(); toast('Secrets save fail: ' + e.message, 'error'); return false; }
     return true;
   }
 

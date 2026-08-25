@@ -48,13 +48,13 @@ async function getPayments(): Promise<any> {
   // NOTE: settings me sirf mode/env/key-ID (key IDs public identifiers hain)
   return rows?.[0]?.value || {};
 }
-// Key SECRETS alag admin-only table me hain (PATCH9: settings public-readable the)
+// Key SECRETS in public.secrets (RLS enabled+forced; service_role/postgres only)
 async function getKeySecrets(): Promise<{ test: string; live: string }> {
-  const rows = await rest("GET", "/payment_keys?select=env,key_secret") as any[];
+  const rows = await rest("GET", "/secrets?select=key,value") as any[];
   const o: { test: string; live: string } = { test: "", live: "" };
   (rows || []).forEach((r: any) => {
-    if (r.env === "test") o.test = r.key_secret || "";
-    else o.live = r.key_secret || "";
+    if (r.key === "razorpay_test_key_secret") o.test = r.value || "";
+    else if (r.key === "razorpay_live_key_secret") o.live = r.value || "";
   });
   return o;
 }
