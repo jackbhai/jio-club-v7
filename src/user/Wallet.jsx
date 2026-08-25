@@ -34,14 +34,29 @@ export default function Wallet({ game, profile, user, features }) {
   const depositValid = amt >= minDep && amt <= 1000000;
   const withdrawValid = amt >= minWd && amt <= maxWd && upiId.trim().length >= 5 && amt <= (profile.balance || 0);
 
+  // ---- Multi-UPI (admin-managed accounts) ----
+  const [upiAccounts, setUpiAccounts] = useState(null);
+  const [selUpi, setSelUpi] = useState('');
+  useEffect(() => {
+    supabase.from('upi_accounts').select('*').eq('status', 'active').order('sort_order')
+      .then(({ data }) => setUpiAccounts(data || []));
+  }, []);
+  const activeUpi = (upiAccounts || []).filter((a) => a.status === 'active');
+  const selAcc = activeUpi.find((a) => a.id === selUpi) || activeUpi.find((a) => a.is_default) || activeUpi[0];
+  const upiDisplayId = selAcc ? selAcc.upi_id : (upi.upiId || '');
+  const upiDisplayLabel = selAcc ? selAcc.label : 'Primary';
+  // Razorpay env (admin toggle: test/live)
+  const rzpEnv = payments.env === 'live' ? 'live' : 'test';
+  const rzpKeyId = rzpEnv === 'live' ? payments.liveKeyId : payments.testKeyId;
+
   useEffect(() => { setUpiId(profile?.upi_id || ''); }, [profile?.upi_id]);
 
   // QR sirf VALID amount pe generate (V7-009 fix)
   useEffect(() => {
-    if (!upi.upiId || !depositValid || !depositOn) { setQr(''); return; }
-    const s = `upi://pay?pa=${encodeURIComponent(upi.upiId)}&pn=${encodeURIComponent(appName)}&am=${amt}&cu=INR&tn=${encodeURIComponent(appName + ' deposit ' + (ref || ''))}`;
+    if (!upiDisplayId || !depositValid || !depositOn) { setQr(''); return; }
+    const s = `upi://pay?pa=${encodeURIComponent(upiDisplayId)}&pn=${encodeURIComponent(appName)}&am=${amt}&cu=INR&tn=${encodeURIComponent(appName + ' deposit ' + (ref || ''))}`;
     QRCode.toDataURL(s, { width: 240, margin: 1, color: { dark: '#171c2e' } }).then(setQr).catch(() => setQr(''));
-  }, [upi.upiId, amt, ref, appName, depositOn, depositValid]);
+  }, [upiDisplayId, amt, ref, appName, depositOn, depositValid]);
 
   async function loadHistory() {
     const [dep, wd] = await Promise.all([
@@ -199,9 +214,9 @@ export default function Wallet({ game, profile, user, features }) {
                   ))}
                 </div>
 
-                {payments.mode === 'razorpay' && payments.razorpayKeyId ? (
+                {payments.mode === 'razorpay' && rzpKeyId ? (
                   <button className="btn btn-primary btn-block" onClick={onRazorpay} disabled={busy || amt <= 0}>
-                    <Ic n="zap" s={16} />{busy ? 'Please wait…' : 'Pay Now with Razorpay (test mode)'}
+                    <Ic n="zap" s={16} />{busy ? 'Please wait…' : `Pay Now with Razorpay (${rzpEnv === 'live' ? 'LIVE' : 'test mode'})`}
                   </button>
                 ) : (
                   <>
@@ -210,15 +225,27 @@ export default function Wallet({ game, profile, user, features }) {
                         <Ic n="alert" s={15} />Enter amount between ₹{minDep} and ₹10,00,000
                       </div>
                     )}
-                    {upi.upiId && (
+                    {activeUpi.length > 1 && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+                        {activeUpi.map((a) => (
+                          <button key={a.id}
+                            className={`btn btn-sm ${selAcc?.id === a.id ? 'btn-primary' : 'btn-ghost'}`}
+                            onClick={() => { setSelUpi(a.id); sfx.click(); }}>
+                            <Ic n="upi" s={13} />{a.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {upiDisplayId && (
                       <div style={{ textAlign: 'center', marginBottom: 14 }}>
                         <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                          {depositValid ? `Send ${money(amt)} to UPI ID:` : 'UPI ID (QR unlocks on valid amount):'}
+                          {depositValid ? `Send ${money(amt)} to ${upiDisplayLabel}:` : 'UPI ID (QR unlocks on valid amount):'}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
-                          <input className="input" style={{ width: 190, textAlign: 'center', fontWeight: 800 }} readOnly value={upi.upiId} />
-                          <button className="btn btn-ghost btn-sm" onClick={async () => { await copyText(upi.upiId); toast('UPI ID copied', 'success'); }}><Ic n="copy" s={14} /></button>
+                          <input className="input" style={{ width: 190, textAlign: 'center', fontWeight: 800 }} readOnly value={upiDisplayId} />
+                          <button className="btn btn-ghost btn-sm" onClick={async () => { await copyText(upiDisplayId); toast('UPI ID copied', 'success'); }}><Ic n="copy" s={14} /></button>
                         </div>
+                        {selAcc?.holder_name && <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 5 }}>A/c: {selAcc.holder_name}</div>}
                         {qr && <img src={qr} alt="UPI QR" style={{ width: 170, height: 170, margin: '12px auto 0', display: 'block', borderRadius: 14, background: '#fff', padding: 10 }} />}
                         {qr && <div style={{ color: 'var(--text-dim)', fontSize: '0.74rem', marginTop: 8, display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center' }}>
                           <Ic n="qr" s={12} />Scan with {upi.apps?.join(', ') || 'any UPI app'}

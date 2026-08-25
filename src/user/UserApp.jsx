@@ -10,13 +10,15 @@ import Game from './Game.jsx';
 import Wallet from './Wallet.jsx';
 import MyBets from './MyBets.jsx';
 import Chat from './Chat.jsx';
+import Support from './Support.jsx';
 import Profile from './Profile.jsx';
 
 const NAV = [
   { id: 'game', label: 'Game', ico: 'target' },
   { id: 'wallet', label: 'Wallet', ico: 'wallet' },
-  { id: 'bets', label: 'My Bets', ico: 'list' },
+  { id: 'bets', label: 'Bets', ico: 'list' },
   { id: 'chat', label: 'Chat', ico: 'chat' },
+  { id: 'support', label: 'Support', ico: 'headset' },
   { id: 'profile', label: 'Profile', ico: 'user' }
 ];
 
@@ -178,6 +180,7 @@ export default function UserApp() {
         {tab === 'wallet' && <Wallet game={game} profile={profile} user={user} features={features} />}
         {tab === 'bets' && <MyBets user={user} />}
         {tab === 'chat' && <Chat game={game} profile={profile} user={user} />}
+        {tab === 'support' && <Support user={user} />}
         {tab === 'profile' && <Profile game={game} profile={profile} user={user} onProfile={setProfile} features={features} />}
         </ErrorBoundary>
       </div>

@@ -257,6 +257,17 @@ export default function GameControl() {
                 onChange={(e) => set('maxBet', Number(e.target.value) || 10000)} />
             </div>
           </div>
+          <div className="setting-row">
+            <div><div className="s-label">Bets per Period (per user)</div><div className="s-desc">1 = ek hi bet · 2-10 = multiple · 0 = unlimited</div></div>
+            <div className="s-ctrl">
+              <button className={`btn btn-sm ${(g.betsPerPeriod ?? 1) === 1 ? 'btn-primary' : 'btn-ghost'}`} onClick={() => set('betsPerPeriod', 1)}>1</button>
+              <button className={`btn btn-sm ${(g.betsPerPeriod ?? 1) === 3 ? 'btn-primary' : 'btn-ghost'}`} onClick={() => set('betsPerPeriod', 3)}>3</button>
+              <button className={`btn btn-sm ${(g.betsPerPeriod ?? 1) === 5 ? 'btn-primary' : 'btn-ghost'}`} onClick={() => set('betsPerPeriod', 5)}>5</button>
+              <button className={`btn btn-sm ${(g.betsPerPeriod ?? 1) === 0 ? 'btn-primary' : 'btn-ghost'}`} onClick={() => set('betsPerPeriod', 0)}>
+                <Ic n="zap" s={13} />Unlimited
+              </button>
+            </div>
+          </div>
           <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={busy}
             onClick={() => {
               setMaxBefore(g.maxBet ?? 10000);

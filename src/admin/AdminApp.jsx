@@ -5,18 +5,24 @@ import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { cx } from '../lib/utils.js';
 import Dashboard from './sections/Dashboard.jsx';
+import UsersSection from './sections/Users.jsx';
 import GameControl from './sections/GameControl.jsx';
-import Users from './sections/Users.jsx';
+import Results from './sections/Results.jsx';
+import Bets from './sections/Bets.jsx';
 import Deposits from './sections/Deposits.jsx';
 import Withdrawals from './sections/Withdrawals.jsx';
-import Bets from './sections/Bets.jsx';
-import Results from './sections/Results.jsx';
 import Coupons from './sections/Coupons.jsx';
 import Referrals from './sections/Referrals.jsx';
+import Ledger from './sections/Ledger.jsx';
+import SupportInbox from './sections/SupportInbox.jsx';
+import {
+  FeaturesSection, PayoutsSection, WalletSection, UpiSection,
+  PaymentsSection, CommunitySection, AppearanceSection, SoundsSection,
+  LinksSection, ContactSection
+} from './sections/AdminSettings.jsx';
 import { ChatSection, AnnouncementsSection } from './sections/Community.jsx';
 import Analytics from './sections/Analytics.jsx';
 import Logs from './sections/Logs.jsx';
-import Settings from './sections/Settings.jsx';
 
 const SECTIONS = [
   { id: 'dashboard', label: 'Dashboard', ico: 'layout', group: 'Main' },
@@ -27,13 +33,26 @@ const SECTIONS = [
   { id: 'deposits', label: 'Deposits', ico: 'arrowDown', group: 'Money' },
   { id: 'withdrawals', label: 'Withdrawals', ico: 'arrowUp', group: 'Money' },
   { id: 'coupons', label: 'Coupons', ico: 'ticket', group: 'Money' },
+  { id: 'ledger', label: 'Wallet Ledger', ico: 'file', group: 'Money' },
   { id: 'referrals', label: 'Referrals & Ranks', ico: 'share', group: 'Growth' },
-  { id: 'chat', label: 'Chat Moderation', ico: 'chat', group: 'Community' },
-  { id: 'announcements', label: 'Announcements', ico: 'megaphone', group: 'Community' },
+  { id: 'support', label: 'Support Inbox', ico: 'headset', group: 'Support' },
+  { id: 'chat', label: 'Chat Moderation', ico: 'chat', group: 'Support' },
+  { id: 'announcements', label: 'Announcements', ico: 'megaphone', group: 'Support' },
   { id: 'analytics', label: 'Analytics', ico: 'chart', group: 'Insights' },
   { id: 'logs', label: 'Admin Logs', ico: 'file', group: 'Insights' },
-  { id: 'settings', label: 'Settings', ico: 'sliders', group: 'System' }
+  { id: 'features', label: 'Features', ico: 'toggle', group: 'Settings' },
+  { id: 'payouts', label: 'Payouts', ico: 'percent', group: 'Settings' },
+  { id: 'walletset', label: 'Wallet Settings', ico: 'wallet', group: 'Settings' },
+  { id: 'upi', label: 'UPI Accounts', ico: 'upi', group: 'Settings' },
+  { id: 'payments', label: 'Payments / Razorpay', ico: 'card', group: 'Settings' },
+  { id: 'communityset', label: 'Community Settings', ico: 'radio', group: 'Settings' },
+  { id: 'appearance', label: 'Appearance', ico: 'sparkles', group: 'Settings' },
+  { id: 'sounds', label: 'Sounds', ico: 'volume', group: 'Settings' },
+  { id: 'links', label: 'Links Directory', ico: 'link', group: 'Settings' },
+  { id: 'contact', label: 'Contact & About', ico: 'headset', group: 'Settings' }
 ];
+
+const GROUPS = ['Main', 'Game Engine', 'Money', 'Growth', 'Support', 'Insights', 'Settings'];
 
 function AdminLogin() {
   const [email, setEmail] = useState('');
@@ -106,7 +125,6 @@ export default function AdminApp() {
 
   useEffect(() => { if (user) setChecking(false); }, [user]);
 
-  // Dashboard quick-links
   useEffect(() => {
     const on = (e) => setSection(e.detail);
     window.addEventListener('jc:goto', on);
@@ -118,12 +136,43 @@ export default function AdminApp() {
 
   const sec = SECTIONS.find((s) => s.id === section);
 
+  const renderSection = () => {
+    switch (section) {
+      case 'dashboard': return <Dashboard profile={profile} />;
+      case 'users': return <UsersSection />;
+      case 'gamecontrol': return <GameControl />;
+      case 'results': return <Results />;
+      case 'bets': return <Bets />;
+      case 'deposits': return <Deposits />;
+      case 'withdrawals': return <Withdrawals />;
+      case 'coupons': return <Coupons />;
+      case 'ledger': return <Ledger />;
+      case 'referrals': return <Referrals />;
+      case 'support': return <SupportInbox />;
+      case 'chat': return <ChatSection />;
+      case 'announcements': return <AnnouncementsSection />;
+      case 'analytics': return <Analytics />;
+      case 'logs': return <Logs />;
+      case 'features': return <FeaturesSection />;
+      case 'payouts': return <PayoutsSection />;
+      case 'walletset': return <WalletSection />;
+      case 'upi': return <UpiSection />;
+      case 'payments': return <PaymentsSection />;
+      case 'communityset': return <CommunitySection />;
+      case 'appearance': return <AppearanceSection />;
+      case 'sounds': return <SoundsSection />;
+      case 'links': return <LinksSection />;
+      case 'contact': return <ContactSection />;
+      default: return <Dashboard profile={profile} />;
+    }
+  };
+
   return (
     <div className="admin-shell">
       <Toasts />
       <div className={cx('admin-sidebar', drawer && 'open')}>
         <div className="brand"><Ic n="shield" s={20} />ADMIN v7</div>
-        {['Main', 'Game Engine', 'Money', 'Growth', 'Community', 'Insights', 'System'].map((group) => (
+        {GROUPS.map((group) => (
           <div key={group}>
             <div className="side-label">{group}</div>
             {SECTIONS.filter((s) => s.group === group).map((s) => (
@@ -154,20 +203,7 @@ export default function AdminApp() {
         </div>
         <div className="page-enter" key={section}>
           <ErrorBoundary label={sec?.label}>
-            {section === 'dashboard' && <Dashboard profile={profile} />}
-            {section === 'users' && <Users />}
-            {section === 'gamecontrol' && <GameControl />}
-            {section === 'results' && <Results />}
-            {section === 'bets' && <Bets />}
-            {section === 'deposits' && <Deposits />}
-            {section === 'withdrawals' && <Withdrawals />}
-            {section === 'coupons' && <Coupons />}
-            {section === 'referrals' && <Referrals />}
-            {section === 'chat' && <ChatSection />}
-            {section === 'announcements' && <AnnouncementsSection />}
-            {section === 'analytics' && <Analytics />}
-            {section === 'logs' && <Logs />}
-            {section === 'settings' && <Settings />}
+            {renderSection()}
           </ErrorBoundary>
         </div>
       </div>

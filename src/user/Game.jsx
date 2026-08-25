@@ -28,14 +28,15 @@ function payoutFor(bet, payouts) {
 export default function Game({ game, profile, onGame }) {
   const [now, setNow] = useState(Date.now());
   const [results, setResults] = useState(game?.lastResults || []);
+  const [myBets, setMyBets] = useState([]);
   const [bet, setBet] = useState(null);
   const [amount, setAmount] = useState('');
   const [mult, setMult] = useState(1);
   const [busy, setBusy] = useState(false);
   const [announce, setAnnounce] = useState(null);
   const [confetti, setConfetti] = useState(false);
-  const [myBet, setMyBet] = useState(null);
   const lastTickSec = useRef(-1);
+  const announcedRef = useRef(null); // periodId already announced
 
   const g = game || {};
   const gameCfg = g.game || {};
@@ -47,6 +48,8 @@ export default function Game({ game, profile, onGame }) {
   const remaining = periodStart + durMs - now;
   const bettingOpen = remaining > closeMs && gameCfg.active !== false && gameCfg.maintenance !== true;
   const paused = gameCfg.active === false || gameCfg.maintenance === true;
+  const cap = Number(gameCfg.betsPerPeriod ?? 1); // 0 = unlimited (admin control)
+  const inCloseWindow = remaining <= closeMs && remaining > 0;
 
   useEffect(() => { if (game?.lastResults) setResults(game.lastResults); }, [game?.lastResults]);
 
@@ -60,52 +63,81 @@ export default function Game({ game, profile, onGame }) {
   const progress = totalMs / durMs;
   const C = 2 * Math.PI * 56;
 
+  // 5-4-3-2-1 tick sound
   useEffect(() => {
-    if (bettingOpen && secLeft <= 5 && secLeft > 0 && lastTickSec.current !== secLeft && gameCfg.maintenance !== true) {
+    if (inCloseWindow && secLeft <= 5 && secLeft > 0 && lastTickSec.current !== secLeft) {
       lastTickSec.current = secLeft;
       if (g.sounds?.tick !== false) sfx.tick();
     }
-    if (secLeft > 5) lastTickSec.current = -1;
-  }, [secLeft, bettingOpen]);
+    if (!inCloseWindow) lastTickSec.current = -1;
+  }, [secLeft, inCloseWindow]);
 
   const refetch = useCallback(() => {
     rpc('game_state').then(onGame).catch(() => {});
   }, [onGame]);
   useEffect(() => { if (remaining < -2500) refetch(); }, [remaining, refetch]);
 
+  // Load MY pending bets for this period (robust — survives tab switch/refresh)
+  useEffect(() => {
+    if (!profile || !periodId) return;
+    let alive = true;
+    supabase.from('bets').select('*').eq('uid', profile.id).eq('period_id', periodId).eq('result', 'pending')
+      .then(({ data }) => { if (alive) setMyBets(data || []); });
+    return () => { alive = false; };
+  }, [profile?.id, periodId]);
+
+  // SETTLEMENT WATCH — kisi bhi case mein win/loss screen aayegi (realtime + local + DB poll)
+  const settleAnnounce = useCallback((r) => {
+    if (announcedRef.current === r.period_id) return;
+    announcedRef.current = r.period_id;
+    let stake = 0, winAmt = 0, wonAny = false;
+    myBets.forEach((b) => {
+      stake += Number(b.amount);
+      const won = isWin(b, r);
+      if (won) { winAmt += Number(b.amount) * payoutFor(b, payouts); wonAny = true; }
+    });
+    setAnnounce({ number: r.number, color: r.color, size: r.size, won: wonAny, amount: stake, winAmount: winAmt, count: myBets.length });
+    if (wonAny) { if (g.sounds?.win !== false) sfx.win(); setConfetti(true); setTimeout(() => setConfetti(false), 3800); }
+    else if (g.sounds?.lose !== false) sfx.lose();
+    setMyBets([]);
+    setTimeout(refetch, 900);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myBets, payouts]);
+
+  useEffect(() => {
+    if (!myBets.length) return;
+    const iv = setInterval(async () => {
+      const pid = myBets[0].period_id;
+      const local = results.find((r) => r.period_id === pid);
+      if (local) { settleAnnounce(local); return; }
+      if (remaining < closeMs + 1500) {
+        const { data } = await supabase.from('results').select('*').eq('period_id', pid).maybeSingle();
+        if (data) settleAnnounce(data);
+      }
+    }, 800);
+    return () => clearInterval(iv);
+  }, [myBets, results, remaining, closeMs, settleAnnounce]);
+
+  // Realtime fast path
   useEffect(() => {
     if (!profile) return;
-    const ch = supabase.channel('game-realtime-' + profile.id)
+    const ch = supabase.channel('game-rt-' + profile.id)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'results' }, (p) => {
         const r = p.new;
         sfx.flip();
-        if (myBet && myBet.periodId === r.period_id) {
-          const won = isWin(myBet, r);
-          const winAmt = won ? myBet.amount * payoutFor(myBet, payouts) : 0;
-          setTimeout(() => {
-            setAnnounce({ number: r.number, color: r.color, size: r.size, won, amount: myBet.amount, winAmount: winAmt });
-            if (won) { if (g.sounds?.win !== false) sfx.win(); setConfetti(true); setTimeout(() => setConfetti(false), 3800); }
-            else if (g.sounds?.lose !== false) sfx.lose();
-          }, 650);
-          setTimeout(refetch, 900);
+        if (myBets.length && myBets[0].period_id === r.period_id) {
+          setTimeout(() => settleAnnounce(r), 600);
         } else {
           setResults((xs) => [r, ...xs].slice(0, 50));
         }
       })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, [profile?.id, myBet, payouts, refetch]);
-
-  useEffect(() => {
-    if (myBet && game?.periodId && myBet.periodId !== game.periodId) {
-      setMyBet(null);
-      lastTickSec.current = -1;
-    }
-  }, [game?.periodId]);
+  }, [profile?.id, myBets, settleAnnounce]);
 
   function openBet(type, selection) {
     if (!bettingOpen) { toast('Betting closed — wait for next period', 'error'); return; }
-    if (myBet) { toast('You already have a bet in this period', 'info'); return; }
+    if (cap > 0 && myBets.length >= cap) { toast(`Max ${cap} bet${cap > 1 ? 's' : ''} per period (admin limit)`, 'info'); return; }
     sfx.click();
     setBet({ type, selection });
     setAmount('');
@@ -120,15 +152,17 @@ export default function Game({ game, profile, onGame }) {
     setBusy(true); sfx.click();
     try {
       const res = await rpc('place_bet', { p_type: bet.type, p_selection: bet.selection, p_amount: amt });
-      setMyBet({ type: bet.type, selection: bet.selection, amount: amt, periodId: res.periodId });
+      setMyBets((prev) => [...prev, { type: bet.type, selection: bet.selection, amount: amt, period_id: res.periodId, id: 'local-' + Date.now() }]);
       setBet(null);
       sfx.cash();
-      toast(`Bet placed: ${bet.selection} — ${money(amt)}`, 'success');
+      toast(`Bet placed: ${bet.selection} — ${money(amt)} (${res.receipt || ''})`, 'success');
     } catch (e) {
       sfx.error();
       toast(e.message, 'error');
     } finally { setBusy(false); }
   }
+
+  const totalStake = myBets.reduce((s, b) => s + Number(b.amount), 0);
 
   return (
     <div>
@@ -140,12 +174,12 @@ export default function Game({ game, profile, onGame }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
             <Ic n="hash" s={12} />Current Period
           </div>
-          <div style={{ fontSize: '1.08rem', fontWeight: 900, fontFamily: 'monospace', letterSpacing: 1, marginTop: 4 }}>{periodId}</div>
+          <div style={{ fontSize: '1.02rem', fontWeight: 900, fontFamily: 'monospace', letterSpacing: 0.5, marginTop: 4, wordBreak: 'break-all' }}>{periodId}</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 4, display: 'flex', gap: 5, alignItems: 'center' }}>
-            <Ic n="clock" s={12} />{gameCfg.duration || 60}s period
+            <Ic n="clock" s={12} />{gameCfg.duration || 60}s · {cap > 0 ? `max ${cap} bet${cap > 1 ? 's' : ''}/period` : 'unlimited bets'}
           </div>
         </div>
-        <div className={`timer-ring ${secLeft <= 5 && bettingOpen ? 'warning' : ''}`}>
+        <div className={`timer-ring ${inCloseWindow ? 'warning' : ''}`}>
           <svg width="132" height="132" viewBox="0 0 132 132">
             <defs>
               <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
@@ -158,8 +192,8 @@ export default function Game({ game, profile, onGame }) {
               strokeDasharray={C} strokeDashoffset={C * (1 - progress)} />
           </svg>
           <div className="timer-center">
-            <div className="timer-sec">{bettingOpen ? secLeft : '—'}</div>
-            <div className="timer-label"><Ic n="timer" s={11} />left</div>
+            <div className="timer-sec">{remaining > 0 ? secLeft : 0}</div>
+            <div className="timer-label"><Ic n="timer" s={11} />{remaining > 0 ? (inCloseWindow ? 'closing…' : 'left') : 'result…'}</div>
           </div>
         </div>
       </div>
@@ -170,9 +204,21 @@ export default function Game({ game, profile, onGame }) {
           {gameCfg.maintenance ? 'Under maintenance — back soon' : 'Game paused by admin'}
         </div>
       )}
-      {!bettingOpen && !paused && (
+      {!bettingOpen && !paused && !myBets.length && (
         <div className="betting-closed" style={{ marginTop: 12 }}>
           <Ic n="lock" s={14} />Betting closed — result coming…
+        </div>
+      )}
+      {myBets.length > 0 && !bettingOpen && !announce && (
+        <div className="card" style={{ marginTop: 12, borderColor: 'rgba(255,200,87,0.5)', background: 'linear-gradient(135deg, rgba(255,200,87,0.08), transparent)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: 'var(--warning)' }}>
+            <Ic n="clock" s={16} />Waiting for result — your bet{myBets.length > 1 ? 's' : ''}:
+          </div>
+          <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {myBets.map((b, i) => (
+              <span key={b.id || i} className="badge badge-pending">{b.selection} · {money(b.amount)}</span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -225,12 +271,18 @@ export default function Game({ game, profile, onGame }) {
         </div>
       </div>
 
-      {myBet && (
+      {/* My bets this period (multiple supported) */}
+      {myBets.length > 0 && bettingOpen && (
         <div className="card" style={{ marginTop: 12, borderColor: 'rgba(124,108,255,0.5)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}>
-            <Ic n="clock" s={15} />Your bet this period:
-            <span className="badge badge-pending">{myBet.selection} · {money(myBet.amount)}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, marginBottom: 8 }}>
+            <Ic n="clock" s={15} />This period ({myBets.length}{cap > 0 ? `/${cap}` : ''}):
           </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {myBets.map((b, i) => (
+              <span key={b.id || i} className="badge badge-pending">{b.selection} · {money(b.amount)}</span>
+            ))}
+          </div>
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--text-dim)' }}>Total staked: <b>{money(totalStake)}</b></div>
         </div>
       )}
 
@@ -266,22 +318,22 @@ export default function Game({ game, profile, onGame }) {
           </div>
           <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
             <span>Available: {money(profile.balance)}</span>
-            <span>Payout ×{payoutFor(bet, payouts)}</span>
+            <span>Payout ×{payoutFor(bet, payouts)} · Period {myBets.length}{cap > 0 ? `/${cap}` : ''}</span>
           </div>
         </Modal>
       )}
 
-      {/* Result announcement */}
+      {/* Result announcement — BADA bada (multiple bets aggregate) */}
       {announce && (
         <div className="result-overlay" onClick={() => setAnnounce(null)}>
           <div className="result-card">
             <div className={`result-num ${numColor(announce.number)}`}>{announce.number}</div>
             <div className="result-title">
               {announce.won
-                ? <span className="result-win"><Ic n="trophy" s={26} />You WON {money(announce.winAmount)}!</span>
-                : <span className="result-lose"><Ic n="x" s={26} />You lost {money(announce.amount)}</span>}
+                ? <span className="result-win"><Ic n="trophy" s={28} />YOU WON {money(announce.winAmount)}!</span>
+                : <span className="result-lose"><Ic n="x" s={28} />You lost {money(announce.amount)}</span>}
             </div>
-            <div className="result-meta">{announce.color} · {announce.size}</div>
+            <div className="result-meta">{announce.color} · {announce.size}{announce.count > 1 ? ` · ${announce.count} bets` : ''}</div>
             <div className="result-meta" style={{ marginTop: 10, fontSize: '0.78rem', opacity: 0.7 }}>tap anywhere to continue</div>
           </div>
         </div>
