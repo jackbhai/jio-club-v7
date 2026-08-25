@@ -726,3 +726,149 @@ export function ContactSection() {
     </Shell>
   );
 }
+
+/* ================= BRANDING (full site customization) ================= */
+export function BrandingSection() {
+  const [app, setApp] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'appearance').single()
+      .then(({ data }) => setApp(data?.value || {})).catch(() => {});
+  }, []);
+
+  function set(k, v) { setApp((a) => ({ ...(a || {}), [k]: v })); }
+
+  async function save() {
+    setBusy(true);
+    const { error } = await supabase.from('settings').upsert({ key: 'appearance', value: app }, { onConflict: 'key' });
+    setBusy(false);
+    if (error) { sfx.error(); toast(error.message, 'error'); return; }
+    sfx.cash();
+    toast('Branding saved — live site pe turant apply', 'success');
+  }
+
+  async function uploadLogo(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 1024 * 1024) { toast('Logo max 1MB', 'error'); return; }
+    setBusy(true);
+    const ext = file.type === 'image/png' ? 'png' : 'jpg';
+    const path = 'logo-' + Date.now() + '.' + ext;
+    const { error: upErr } = await supabase.storage.from('branding').upload(path, file, { contentType: file.type });
+    if (upErr) { setBusy(false); sfx.error(); toast('Upload failed: ' + upErr.message, 'error'); return; }
+    const { data: pub } = supabase.storage.from('branding').getPublicUrl(path);
+    // delete old logo if any
+    if (app?.logoUrl) {
+      const oldPath = app.logoUrl.split('/branding/')[1];
+      if (oldPath) supabase.storage.from('branding').remove([oldPath]);
+    }
+    set('logoUrl', pub.data.publicUrl);
+    setBusy(false);
+    sfx.cash();
+    toast('Logo uploaded — ab Save dabao', 'success');
+  }
+
+  async function removeLogo() {
+    if (app?.logoUrl) {
+      const oldPath = app.logoUrl.split('/branding/')[1];
+      if (oldPath) await supabase.storage.from('branding').remove([oldPath]);
+    }
+    set('logoUrl', '');
+    toast('Logo hata diya — default icon use hoga', 'info');
+  }
+
+  if (!app) return <div className="spinner"></div>;
+
+  const accent = app.accent || '#7c6cff';
+  const accent2 = app.accent2 || '#00c896';
+  const name = app.appName || 'JIO CLUB';
+  const tagline = app.tagline || 'Color Prediction';
+  const logoText = app.logoText || '';
+
+  return (
+    <div>
+      {/* Live preview */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title"><Ic n="eye" s={17} />Live Preview (yahi dikhega site pe)</div>
+        <div style={{ background: 'var(--bg)', borderRadius: 12, padding: 14, border: '1px solid var(--border-solid)' }}>
+          {/* topbar mock */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            {app.logoUrl
+              ? <img src={app.logoUrl} alt="" style={{ width: 26, height: 26, borderRadius: 7, objectFit: 'cover' }} />
+              : logoText
+                ? <span style={{ width: 26, height: 26, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,' + accent + ',' + accent2 + ')', color: '#fff', fontWeight: 900, fontSize: 12 }}>{logoText.slice(0, 2).toUpperCase()}</span>
+                : <Ic n="dice" s={20} style={{ color: accent }} />}
+            <b style={{ background: 'linear-gradient(135deg,' + accent + ',' + accent2 + ')', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', fontSize: '1.05rem' }}>{name}</b>
+            <span style={{ marginLeft: 'auto', background: 'linear-gradient(135deg,' + accent + '33,' + accent2 + '22)', border: '1px solid ' + accent + '55', borderRadius: 99, padding: '5px 12px', fontWeight: 900, fontSize: '0.82rem' }}>₹ 1,234</span>
+          </div>
+          <div style={{ color: 'var(--text-dim)', fontSize: '0.8rem', marginBottom: 10 }}>{tagline}</div>
+          <button className="btn btn-primary" style={{ pointerEvents: 'none' }}><Ic n="check" s={15} />Primary Button</button>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title"><Ic n="image" s={17} />Logo</div>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ width: 72, height: 72, borderRadius: 16, border: '2px dashed var(--border-solid)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', background: 'var(--card-2)' }}>
+            {app.logoUrl
+              ? <img src={app.logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : logoText
+                ? <span style={{ background: 'linear-gradient(135deg,' + accent + ',' + accent2 + ')', color: '#fff', fontWeight: 900, fontSize: 20, width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{logoText.slice(0, 2).toUpperCase()}</span>
+                : <Ic n="dice" s={30} style={{ color: 'var(--text-dim)' }} />}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button className="btn btn-primary btn-sm" onClick={() => fileRef.current?.click()} disabled={busy}>
+              <Ic n="upload" s={14} />Upload Logo (PNG/JPG, max 1MB)
+            </button>
+            {app.logoUrl && <button className="btn btn-ghost btn-sm" onClick={removeLogo}><Ic n="trash" s={14} />Remove Logo</button>}
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg" style={{ display: 'none' }} onChange={uploadLogo} />
+          </div>
+        </div>
+        <div className="form-group" style={{ marginTop: 12 }}>
+          <label>Logo Text / Monogram (image na ho toh ye dikhega)</label>
+          <input className="input" style={{ maxWidth: 220 }} maxLength={3} placeholder="J7" value={logoText} onChange={(e) => set('logoText', e.target.value)} />
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title"><Ic n="tag" s={17} />Names</div>
+        <div className="form-group">
+          <label>App Name (topbar, title, PWA)</label>
+          <input className="input" value={name} onChange={(e) => set('appName', e.target.value)} maxLength={24} />
+        </div>
+        <div className="form-group">
+          <label>Tagline (auth screen pe dikhega)</label>
+          <input className="input" value={tagline} onChange={(e) => set('tagline', e.target.value)} maxLength={40} />
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card-title"><Ic n="sparkles" s={17} />Colors (buttons, links, accents)</div>
+        <div className="setting-row">
+          <div><div className="s-label">Primary / Accent</div><div className="s-desc">Buttons, brand text, active states</div></div>
+          <div className="s-ctrl">
+            <input type="color" value={accent} style={{ width: 46, height: 34, border: 'none', background: 'none' }} onChange={(e) => set('accent', e.target.value)} />
+            <span style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{accent}</span>
+          </div>
+        </div>
+        <div className="setting-row">
+          <div><div className="s-label">Secondary (gradient partner)</div><div className="s-desc">Gradients, highlights</div></div>
+          <div className="s-ctrl">
+            <input type="color" value={accent2} style={{ width: 46, height: 34, border: 'none', background: 'none' }} onChange={(e) => set('accent2', e.target.value)} />
+            <span style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{accent2}</span>
+          </div>
+        </div>
+      </div>
+
+      <button className="btn btn-primary" style={{ width: '100%' }} onClick={save} disabled={busy}>
+        <Ic n="check" s={16} />{busy ? 'Saving…' : 'Save Branding — Live Apply'}
+      </button>
+      <p className="card-sub" style={{ marginTop: 10, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+        <Ic n="info" s={13} style={{ marginTop: 2, flexShrink: 0 }} />
+        Save hote hi favicon, page title, topbar, buttons — sab live site pe turant change. Game ke colors (red/green/violet) branding se alag hain — wo game hain.
+      </p>
+    </div>
+  );
+}

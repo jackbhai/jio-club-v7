@@ -3,10 +3,16 @@ import { supabase, rpc } from '../lib/supabase.js';
 import { toast, Field } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
+import { applyBranding } from '../lib/branding.js';
+import { Brand } from '../components/Brand.jsx';
 import { t, useT, toggleLang, getLang } from '../lib/i18n.js';
 
 export default function Auth({ refCode }) {
   const t = useT();
+  const [app, setApp] = useState(null);
+  useEffect(() => {
+    rpc('game_state').then((d) => { if (d?.appearance) { setApp(d.appearance); applyBranding(d.appearance); } }).catch(() => {});
+  }, []);
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,9 +71,9 @@ export default function Auth({ refCode }) {
     <div className="auth-wrap">
       <div className="auth-card">
         <div className="auth-logo">
-          <div className="logo-badge"><Ic n="dice" s={38} /></div>
-          <h1>JIO CLUB</h1>
-          <p>{t('auth.tagline')}</p>
+          <div className="logo-badge"><Brand app={app} s={30} /></div>
+          <h1>{app?.appName || 'JIO CLUB'}</h1>
+          <p>{app?.tagline || t('auth.tagline')}</p>
         </div>
         <div className="card" style={{ padding: 22 }}>
           <div className="tabs">

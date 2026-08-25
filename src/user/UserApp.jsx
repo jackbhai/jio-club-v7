@@ -6,6 +6,8 @@ import { sfx } from '../lib/sound.js';
 import { getTheme, toggleTheme } from '../lib/theme.js';
 import { money, timeAgo, cx } from '../lib/utils.js';
 import { t, useT, toggleLang, getLang } from '../lib/i18n.js';
+import { applyBranding } from '../lib/branding.js';
+import { Brand } from '../components/Brand.jsx';
 import Auth from './Auth.jsx';
 import Game from './Game.jsx';
 import Wallet from './Wallet.jsx';
@@ -36,6 +38,7 @@ export default function UserApp() {
       const g = await rpc('game_state');
       setGame(g);
       if (g?.sounds) sfx.init(g.sounds);
+      applyBranding(g?.appearance);
     } catch (e) { /* offline */ }
   }, []);
 
@@ -182,7 +185,7 @@ export default function UserApp() {
 
       {/* Topbar */}
       <div className="topbar">
-        <div className="brand"><Ic n="dice" s={18} />{appName}</div>
+        <div className="brand"><Brand app={game?.appearance} s={16} />{appName}</div>
         <div className={`balance-chip ${balBump ? 'bump' : ''}`}>
           <Ic n="coins" s={15} />{money(profile.balance)}
         </div>

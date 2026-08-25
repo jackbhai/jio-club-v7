@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { supabase } from '../lib/supabase.js';
+import { supabase, rpc } from '../lib/supabase.js';
 import { Toasts, toast, ErrorBoundary } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
+import { applyBranding } from '../lib/branding.js';
+import { Brand } from '../components/Brand.jsx';
 import { cx } from '../lib/utils.js';
 import Dashboard from './sections/Dashboard.jsx';
 import UsersSection from './sections/Users.jsx';
@@ -46,7 +48,7 @@ const SECTIONS = [
   { id: 'upi', label: 'UPI Accounts', ico: 'upi', group: 'Settings' },
   { id: 'payments', label: 'Payments / Razorpay', ico: 'card', group: 'Settings' },
   { id: 'communityset', label: 'Community Settings', ico: 'radio', group: 'Settings' },
-  { id: 'appearance', label: 'Appearance', ico: 'sparkles', group: 'Settings' },
+  { id: 'branding', label: 'Branding', ico: 'tag', group: 'Settings' },
   { id: 'sounds', label: 'Sounds', ico: 'volume', group: 'Settings' },
   { id: 'links', label: 'Links Directory', ico: 'link', group: 'Settings' },
   { id: 'contact', label: 'Contact & About', ico: 'headset', group: 'Settings' },
@@ -154,6 +156,11 @@ export default function AdminApp() {
     toast('2FA verified — session 30 min', 'success');
   }
 
+  const [app, setApp] = useState(null);
+  useEffect(() => {
+    rpc('game_state').then((d) => { if (d?.appearance) { setApp(d.appearance); applyBranding(d.appearance); } }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     const on = (e) => setSection(e.detail);
     window.addEventListener('jc:goto', on);
@@ -220,7 +227,7 @@ export default function AdminApp() {
       case 'upi': return <UpiSection />;
       case 'payments': return <PaymentsSection />;
       case 'communityset': return <CommunitySection />;
-      case 'appearance': return <AppearanceSection />;
+      case 'branding': return <BrandingSection />;
       case 'sounds': return <SoundsSection />;
       case 'links': return <LinksSection />;
       case 'contact': return <ContactSection />;
@@ -233,7 +240,7 @@ export default function AdminApp() {
     <div className="admin-shell">
       <Toasts />
       <div className={cx('admin-sidebar', drawer && 'open')}>
-        <div className="brand"><Ic n="shield" s={20} />ADMIN v7</div>
+        <div className="brand"><Brand app={app} s={15} /><span style={{marginLeft:6}}>{app?.appName || "JIO CLUB"} <span style={{fontSize:'0.66rem',opacity:0.55}}>ADMIN</span></span></div>
         {GROUPS.map((group) => (
           <div key={group}>
             <div className="side-label">{group}</div>
