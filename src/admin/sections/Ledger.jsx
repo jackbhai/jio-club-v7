@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../../lib/supabase.js';
-import { Table, Empty, SearchInput, StatCard, Tabs } from '../../components/ui.jsx';
+import { supabase, rpc } from '../../lib/supabase.js';
+import { Table, Empty, SearchInput, StatCard, Tabs, toast } from '../../components/ui.jsx';
 import { Ic } from '../../lib/icons.jsx';
 import { money, fmtDT, exportCSV } from '../../lib/utils.js';
 
@@ -8,10 +8,11 @@ const TYPE_META = {
   stake: { label: 'Stake (bet)', color: 'var(--danger)' },
   payout: { label: 'Payout (win)', color: 'var(--success)' },
   deposit: { label: 'Deposit', color: 'var(--success)' },
+  deposit_pending: { label: 'Deposit Requested', color: 'var(--warning)' },
   withdraw_lock: { label: 'Withdraw Lock', color: 'var(--warning)' },
   withdraw_paid: { label: 'Withdraw Paid', color: 'var(--info)' },
   refund: { label: 'Refund', color: 'var(--success)' },
-  adjust: { label: 'Adjust', color: 'var(--info)' },
+  adjust: { label: 'Adjust / Opening', color: 'var(--info)' },
   coupon: { label: 'Coupon', color: 'var(--accent)' },
   bonus: { label: 'Bonus', color: 'var(--accent)' }
 };
@@ -53,6 +54,12 @@ export default function Ledger() {
         <SearchInput value={q} onChange={setQ} placeholder="Search ref (BET-123, DEP-5…) or UID prefix…" />
         <button className="btn btn-ghost" onClick={load}><Ic n="refresh" s={15} />Refresh</button>
         <button className="btn btn-ghost" onClick={doExport}><Ic n="export" s={15} />Export CSV</button>
+        <button className="btn btn-ghost" onClick={async () => {
+          const { data, error } = await rpc('admin_action', { p_action: 'backfill-ledger', p_params: {} });
+          if (error) { toast(error.message, 'error'); return; }
+          toast(`Ledger reconciled — ${data?.entries_added || 0} historical entries added (${data?.users_processed || 0} users)`, 'success');
+          load();
+        }}><Ic n="history" s={15} />Reconcile Historical</button>
       </div>
 
       <Tabs active={tab} onChange={setTab} tabs={[

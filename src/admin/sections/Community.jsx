@@ -10,12 +10,26 @@ export function ChatSection() {
   const [msgs, setMsgs] = useState(null);
   const [del, setDel] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [text, setText] = useState('');
 
   const load = useCallback(async () => {
     const { data } = await supabase.from('chats').select('*').order('created_at', { ascending: false }).limit(300);
     setMsgs(data || []);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const iv = setInterval(load, 10000); return () => clearInterval(iv); }, [load]);
+
+  async function sendBroadcast() {
+    const m = text.trim();
+    if (!m) return;
+    setBusy(true);
+    const { error } = await rpc('send_chat', { p_message: m });
+    setBusy(false);
+    if (error) { sfx.error(); toast(error.message, 'error'); return; }
+    sfx.cash();
+    toast('Broadcast posted — users ko turant dikhega', 'success');
+    setText('');
+    load();
+  }
 
   async function clearAll() {
     setBusy(true);
@@ -29,21 +43,36 @@ export function ChatSection() {
 
   return (
     <div>
+      {/* One-way: sirf admin post kar sakta hai */}
+      <div className="card" style={{ marginBottom: 14, background: 'linear-gradient(135deg, rgba(124,108,255,0.1), transparent)' }}>
+        <div className="card-title"><Ic n="megaphone" s={17} />Post Broadcast (users ko live dikhega)</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input className="input" style={{ flex: 1 }} placeholder="e.g. Aaj raat 9 baje maintenance — sab bets safe hain"
+            maxLength={500} value={text} onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && sendBroadcast()} />
+          <button className="btn btn-primary" onClick={sendBroadcast} disabled={busy || !text.trim()}>
+            <Ic n="send" s={15} />Post
+          </button>
+        </div>
+        <p className="card-sub" style={{ marginTop: 8 }}>Users sirf read kar sakte hain — unki replies <b>Support Inbox</b> mein aati hain.</p>
+      </div>
+
       <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
         <button className="btn btn-ghost" onClick={load}><Ic n="refresh" s={15} />Refresh</button>
         <button className="btn btn-danger" onClick={() => setDel({ all: true })} disabled={busy}><Ic n="trash" s={15} />Clear Entire Chat</button>
       </div>
       {!msgs && <div className="spinner"></div>}
-      {msgs && msgs.length === 0 && <Empty icon="chat" msg="Chat is empty" />}
+      {msgs && msgs.length === 0 && <Empty icon="chat" msg="Chat is empty — upar se pehla broadcast post karo" />}
       {msgs && msgs.length > 0 && (
         <div className="card">
           {msgs.map((m) => (
             <div key={m.id} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: '1px solid var(--border)', alignItems: 'flex-start' }}>
-              <div className="chat-avatar" style={{ width: 32, height: 32, fontSize: '0.8rem' }}>{(m.name || '?')[0].toUpperCase()}</div>
+              <div className="chat-avatar" style={{ width: 32, height: 32, fontSize: '0.8rem', background: m.is_admin ? 'linear-gradient(135deg,#7c6cff,#00c896)' : '' }}>{(m.name || '?')[0].toUpperCase()}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 2, flexWrap: 'wrap' }}>
-                  <b style={{ fontSize: '0.86rem' }}>{m.name}</b>
-                  <RankBadge rank={m.rank} small />
+                  <b style={{ fontSize: '0.86rem', color: m.is_admin ? 'var(--accent)' : '' }}>{m.is_admin ? 'ADMIN' : m.name}</b>
+                  {m.is_admin && <span className="badge badge-active"><Ic n="shieldCheck" s={10} />official</span>}
+                  {!m.is_admin && <RankBadge rank={m.rank} small />}
                   <span style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>{timeAgo(m.created_at)} · UID {m.uid.slice(0, 6)}</span>
                 </div>
                 <div style={{ fontSize: '0.9rem', wordBreak: 'break-word' }}>{m.message}</div>
