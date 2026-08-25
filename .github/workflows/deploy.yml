@@ -6,16 +6,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,21 +23,16 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - uses: actions/configure-pages@v5
-        with:
-          # Agar Pages site exist na kare toh yeh khud "GitHub Actions"
-          # source se bana deta hai (branch-source 404/raw-content bug fix)
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # Classic, bullet-proof method: push built dist to gh-pages branch.
+      # Pages source = gh-pages branch (set once in repo Settings -> Pages).
+      - name: Publish to gh-pages
+        run: |
+          git config user.name "deploy-bot"
+          git config user.email "deploy@users.noreply.github.com"
+          git checkout --orphan gh-pages
+          git rm -rf . >/dev/null 2>&1 || true
+          cp -r dist/. .
+          git add -A
+          git commit -m "pages build: $(git rev-parse --short origin/main)" --allow-empty
+          git push --force origin gh-pages
