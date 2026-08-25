@@ -511,10 +511,30 @@ export function SecuritySection() {
   const [qr, setQr] = useState('');
   const [confirmDisable, setConfirmDisable] = useState(false);
   const [disableCode, setDisableCode] = useState('');
+  const [notify, setNotify] = useState(null);
 
   useEffect(() => {
     rpc('mfa_status').then((d) => setStatus(d.data || {})).catch(() => setStatus({}));
+    supabase.from('settings').select('value').eq('key', 'notify').single()
+      .then(({ data }) => setNotify(data?.value || {})).catch(() => {});
   }, []);
+
+  async function setNotifyEnabled(v) {
+    const next = { ...(notify || {}), enabled: v };
+    await supabase.from('settings').upsert({ key: 'notify', value: next }, { onConflict: 'key' });
+    setNotify(next);
+    sfx.click();
+    toast(v ? 'Push alerts ON' : 'Push alerts OFF', 'info');
+  }
+
+  async function regenTopic() {
+    const topic = 'jioclub-' + Math.random().toString(36).slice(2, 14);
+    const next = { ...(notify || {}), topic };
+    await supabase.from('settings').upsert({ key: 'notify', value: next }, { onConflict: 'key' });
+    setNotify(next);
+    sfx.cash();
+    toast('Naya topic ban gaya — ntfy app mein subscribe karo', 'success');
+  }
 
   useEffect(() => {
     if (setup?.otpauth) {
@@ -633,6 +653,29 @@ export function SecuritySection() {
           )}
         </div>
       )}
+
+      <div className="card">
+        <div className="card-title"><Ic n="bell" s={17} />Push Alerts (ntfy — free, no email service needed)</div>
+        <p className="card-sub" style={{ marginBottom: 12 }}>
+          Deposit/withdrawal requests, approvals, support tickets pe <b>instant phone push</b> aayega.
+          Phone pe <b>ntfy</b> app (Play Store / F-Droid) install karo aur neeche wale topic pe subscribe karo.
+        </p>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-dim)', letterSpacing: 1, marginBottom: 4 }}>YOUR TOPIC (subscribe karne ke liye)</div>
+            <input className="input" readOnly value={notify?.topic || '—'} style={{ fontFamily: 'monospace', fontSize: '0.85rem' }} />
+          </div>
+          <button className="btn btn-ghost btn-sm" onClick={async () => { const ok = await copyText(notify?.topic || ''); toast(ok ? 'Topic copied' : 'Failed', ok ? 'success' : 'error'); }}><Ic n="copy" s={14} />Copy</button>
+          <button className="btn btn-ghost btn-sm" onClick={regenTopic}><Ic n="refresh" s={14} />New Topic</button>
+          <Toggle checked={notify?.enabled !== false} onChange={setNotifyEnabled} />
+          <span style={{ fontWeight: 800, fontSize: '0.85rem' }}>{notify?.enabled === false ? 'OFF' : 'ON'}</span>
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.78rem', color: 'var(--text-dim)' }}>
+          <div><Ic n="check" s={12} style={{ verticalAlign: '-2px' }} /> 1) ntfy app kholo → topic: <b>{notify?.topic || '…'}</b> → Subscribe</div>
+          <div><Ic n="check" s={12} style={{ verticalAlign: '-2px' }} /> 2) Web se bhi: ntfy.sh kholo → same topic subscribe karo</div>
+          <div><Ic n="check" s={12} style={{ verticalAlign: '-2px' }} /> 3) Ab har naya deposit/withdrawal/ticket phone pe push aayega</div>
+        </div>
+      </div>
 
       <div className="card">
         <div className="card-title"><Ic n="key" s={17} />Service Key Note</div>

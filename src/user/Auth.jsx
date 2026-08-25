@@ -3,8 +3,10 @@ import { supabase, rpc } from '../lib/supabase.js';
 import { toast, Field } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
+import { t, useT, toggleLang, getLang } from '../lib/i18n.js';
 
 export default function Auth({ refCode }) {
+  const t = useT();
   const [mode, setMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,7 +67,7 @@ export default function Auth({ refCode }) {
         <div className="auth-logo">
           <div className="logo-badge"><Ic n="dice" s={38} /></div>
           <h1>JIO CLUB</h1>
-          <p>Color Prediction — Play, Win, Climb Ranks</p>
+          <p>{t('auth.tagline')}</p>
         </div>
         <div className="card" style={{ padding: 22 }}>
           <div className="tabs">
@@ -94,20 +96,21 @@ export default function Auth({ refCode }) {
               </Field>
             )}
             <button className="btn btn-primary btn-block" type="submit" disabled={busy} style={{ marginTop: 6 }}>
-              {busy ? 'Please wait…' : mode === 'login' ? <><Ic n="logout" s={16} style={{ transform: 'rotate(180deg)' }} />Login</>
-                : mode === 'signup' ? <><Ic n="rocket" s={16} />Create Account</>
-                : <><Ic n="mail" s={16} />Send Reset Link</>}
+              {busy ? 'Please wait…'
+                : mode === 'login' ? <><Ic n="logout" s={16} style={{ transform: 'rotate(180deg)' }} />{t('auth.login_btn')}</>
+                : mode === 'signup' ? <><Ic n="rocket" s={16} />{t('auth.create_btn')}</>
+                : <><Ic n="mail" s={16} />{t('auth.send_reset')}</>}
             </button>
           </form>
           <div style={{ textAlign: 'center', marginTop: 14, fontSize: '0.85rem', color: 'var(--text-dim)' }}>
             {mode === 'login' && (
-              <span>Forgot password?{' '}
-                <a href="#" onClick={(e) => { e.preventDefault(); setMode('forgot'); sfx.click(); }}>Reset it</a>
+              <span>{t('auth.forgot')}{' '}
+                <a href="#" onClick={(e) => { e.preventDefault(); setMode('forgot'); sfx.click(); }}>{' '}{t('auth.reset_it')}</a>
               </span>
             )}
             {mode === 'forgot' && (
               <a href="#" onClick={(e) => { e.preventDefault(); setMode('login'); sfx.click(); }}>
-                <Ic n="arrowLeft" s={13} /> Back to login
+                <Ic n="arrowLeft" s={13} /> {t('auth.back_login')}
               </a>
             )}
             {mode === 'signup' && <span>New here? Great — signup takes 10 seconds.</span>}

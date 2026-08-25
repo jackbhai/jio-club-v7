@@ -7,6 +7,7 @@ import { money, fmtDT, copyText } from '../lib/utils.js';
 import { getTheme, setTheme } from '../lib/theme.js';
 
 export default function Profile({ game, profile, user, onProfile, features }) {
+  const t = useT();
   const [refd, setRefd] = useState(null);
   const [phone, setPhone] = useState(profile.phone || '');
   const [upi, setUpi] = useState(profile.upi_id || '');
@@ -117,31 +118,31 @@ export default function Profile({ game, profile, user, onProfile, features }) {
           <div className="card-title"><Ic n="share" s={18} />My Referral</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontWeight: 800, letterSpacing: 1 }}>YOUR CODE</div>
+              <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)', fontWeight: 800, letterSpacing: 1 }}>{t('profile.your_code')}</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: 3, fontFamily: 'monospace' }}>{profile.referral_code}</div>
             </div>
             <button className="btn btn-ghost" onClick={async () => { const ok = await copyText(profile.referral_code); toast(ok ? 'Code copied' : 'Failed', ok ? 'success' : 'error'); }}>
               <Ic n="copy" s={15} />Copy Code
             </button>
           </div>
-          <button className="btn btn-primary btn-block" onClick={shareRef}><Ic n="link" s={16} />Share Referral Link</button>
+          <button className="btn btn-primary btn-block" onClick={shareRef}><Ic n="link" s={16} />{t('profile.share_link')}</button>
 
           {refd && (
             <div style={{ marginTop: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 800, marginBottom: 6 }}>
-                <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><Ic n="users" s={14} />Team: <b>{refd.count}</b> players</span>
-                {nextRank && <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><Ic n="trophy" s={13} />Next: {nextRank.rank} at {nextRank.min}</span>}
+                <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><Ic n="users" s={14} />{t('profile.team')}: <b>{refd.count}</b></span>
+                {nextRank && <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><Ic n="trophy" s={13} />{t('profile.next_rank')}: {nextRank.rank} at {nextRank.min}</span>}
               </div>
               <div style={{ height: 10, background: 'var(--card-2)', borderRadius: 99, overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: progress + '%', background: 'linear-gradient(90deg, var(--accent), var(--accent-2))', borderRadius: 99, transition: 'width 0.6s' }}></div>
               </div>
               <p style={{ fontSize: '0.73rem', color: 'var(--text-dim)', marginTop: 8 }}>
-                Ranks grow with your team size — no cash rewards, pure prestige.
+                {t('profile.rank_note')}
               </p>
               {refd.leaderboard?.length > 0 && (
                 <div style={{ marginTop: 12, borderTop: '1px solid var(--border-solid)', paddingTop: 12 }}>
                   <div style={{ fontSize: '0.7rem', fontWeight: 800, color: 'var(--text-dim)', marginBottom: 8, letterSpacing: 1, display: 'flex', gap: 6, alignItems: 'center' }}>
-                    <Ic n="trophy" s={13} />TOP REFERRERS
+                    <Ic n="trophy" s={13} />{t('profile.top_referrers')}
                   </div>
                   {refd.leaderboard.slice(0, 3).map((t, i) => (
                     <div key={t.referral_code + i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.84rem', padding: '4px 0', alignItems: 'center' }}>
@@ -162,10 +163,10 @@ export default function Profile({ game, profile, user, onProfile, features }) {
 
       {/* Stats */}
       <div className="stat-grid" style={{ marginTop: 12 }}>
-        <StatCard label="Total Deposits" value={money(profile.total_deposits)} tone="sc-green" icon="arrowDown" />
-        <StatCard label="Total Withdrawn" value={money(profile.total_withdrawn)} tone="sc-blue" icon="arrowUp" />
-        <StatCard label="Total Bets" value={money(profile.total_bet)} tone="sc-gold" icon="target" />
-        <StatCard label="Total Won" value={money(profile.total_won)} tone="sc-green" icon="trophy" />
+        <StatCard label={t('profile.deposits')} value={money(profile.total_deposits)} tone="sc-green" icon="arrowDown" />
+        <StatCard label={t('profile.withdrawn')} value={money(profile.total_withdrawn)} tone="sc-blue" icon="arrowUp" />
+        <StatCard label={t('profile.total_bets')} value={money(profile.total_bet)} tone="sc-gold" icon="target" />
+        <StatCard label={t('profile.total_won')} value={money(profile.total_won)} tone="sc-green" icon="trophy" />
       </div>
       <div className="card-sub" style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
         <Ic n="calendar" s={12} />Member since {fmtDT(profile.created_at)}
@@ -186,18 +187,18 @@ export default function Profile({ game, profile, user, onProfile, features }) {
 
       {/* Responsible Play */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="shield" s={17} />Responsible Play</div>
+        <div className="card-title"><Ic n="shield" s={17} />{t('profile.responsible')}</div>
         <div className="setting-row">
           <div>
-            <div className="s-label">Self-Exclusion (Take a break)</div>
-            <div className="s-desc">Betting/deposit/withdraw turant band — jab bhi chaho OFF karo</div>
+            <div className="s-label">{t('profile.self_excl')}</div>
+            <div className="s-desc">{t('profile.self_excl_sub')}</div>
           </div>
           <Toggle checked={!!profile.self_excluded} onChange={toggleExclusion} disabled={busy} />
         </div>
         <div className="setting-row">
           <div>
-            <div className="s-label">Request Account Deletion</div>
-            <div className="s-desc">Admin review karega. Balance zero nahi hoga jab tak review complete na ho.</div>
+            <div className="s-label">{t('profile.del_request')}</div>
+            <div className="s-desc">{t('profile.del_sub')}</div>
           </div>
           {!profile.deletion_requested ? (
             <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => {
@@ -206,45 +207,45 @@ export default function Profile({ game, profile, user, onProfile, features }) {
               <Ic n="trash" s={13} />Request
             </button>
           ) : (
-            <span className="badge badge-pending">Requested</span>
+            <span className="badge badge-pending">{t('profile.del_request')}</span>
           )}
         </div>
       </div>
 
       {/* Contact */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="phone" s={17} />Contact Details</div>
+        <div className="card-title"><Ic n="phone" s={17} />{t('profile.contact')}</div>
         <Field label="Phone">
           <input className="input" placeholder="+91…" value={phone} onChange={(e) => setPhone(e.target.value)} />
         </Field>
         <Field label="UPI ID (for withdrawals)">
           <input className="input" placeholder="yourname@upi" value={upi} onChange={(e) => setUpi(e.target.value)} />
         </Field>
-        <button className="btn btn-primary btn-block" onClick={saveContact} disabled={busy}><Ic n="check" s={16} />Save Details</button>
+        <button className="btn btn-primary btn-block" onClick={saveContact} disabled={busy}><Ic n="check" s={16} />{t('profile.save')}</button>
       </div>
 
       {/* Settings */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="sliders" s={17} />Preferences</div>
+        <div className="card-title"><Ic n="sliders" s={17} />{t('profile.preferences')}</div>
         <div className="setting-row">
-          <div><div className="s-label">Theme</div><div className="s-desc">Light or dark interface</div></div>
+          <div><div className="s-label">{t('profile.theme')}</div><div className="s-desc">{t('profile.theme_sub')}</div></div>
           <button className="btn btn-ghost btn-sm" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             <Ic n={theme === 'dark' ? 'sun' : 'moon'} s={15} />{theme === 'dark' ? 'Dark → Light' : 'Light → Dark'}
           </button>
         </div>
         <div className="setting-row">
-          <div><div className="s-label">Sound FX</div><div className="s-desc">Clicks, wins, notifications</div></div>
+          <div><div className="s-label">{t('profile.sound')}</div><div className="s-desc">{t('profile.sound_sub')}</div></div>
           <button className="btn btn-ghost btn-sm" onClick={() => { const v = !sfx.isEnabled(); sfx.setEnabled(v); try { localStorage.setItem('jc-sound', v ? '1' : '0'); } catch (e) {} toast(v ? 'Sound ON' : 'Sound OFF', 'info'); }}>
             <Ic n={sfx.isEnabled() ? 'volume' : 'volumeOff'} s={15} />{sfx.isEnabled() ? 'On' : 'Off'}
           </button>
         </div>
         <div className="setting-row">
-          <div><div className="s-label">Change Password</div><div className="s-desc">Min 6 characters</div></div>
+          <div><div className="s-label">{t('profile.change_pw')}</div><div className="s-desc">{t('profile.change_pw_sub')}</div></div>
         </div>
         <Field label="">
           <input className="input" type="password" placeholder="New password" value={pw} onChange={(e) => setPw(e.target.value)} />
         </Field>
-        <button className="btn btn-ghost btn-block" onClick={changePassword} disabled={busy || !pw}><Ic n="key" s={15} />Update Password</button>
+        <button className="btn btn-ghost btn-block" onClick={changePassword} disabled={busy || !pw}><Ic n="key" s={15} />{t('profile.update_pw')}</button>
       </div>
 
       {/* About */}
@@ -261,7 +262,7 @@ export default function Profile({ game, profile, user, onProfile, features }) {
         </p>
       </div>
 
-      <button className="btn btn-danger btn-block" style={{ marginTop: 14 }} onClick={logout}><Ic n="logout" s={16} />Logout</button>
+      <button className="btn btn-danger btn-block" style={{ marginTop: 14 }} onClick={logout}><Ic n="logout" s={16} />{t('profile.logout')}</button>
     </div>
   );
 }

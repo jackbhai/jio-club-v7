@@ -4,6 +4,7 @@ import { Modal, toast, Confetti, Empty, RankBadge } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { money, numColor } from '../lib/utils.js';
+import { t, useT } from '../lib/i18n.js';
 
 const QUICK_AMTS = [10, 50, 100, 500];
 const MULTS = [1, 5, 10, 20];
@@ -26,6 +27,7 @@ function payoutFor(bet, payouts) {
 }
 
 export default function Game({ game, profile, onGame }) {
+  const t = useT();
   const [now, setNow] = useState(Date.now());
   const [results, setResults] = useState(game?.lastResults || []);
   const [myBets, setMyBets] = useState([]);
@@ -147,7 +149,7 @@ export default function Game({ game, profile, onGame }) {
   }, [profile?.id, myBets, settleAnnounce]);
 
   function openBet(type, selection) {
-    if (!bettingOpen) { toast('Betting closed — wait for next period', 'error'); return; }
+    if (!bettingOpen) { toast(t('game.betting_closed'), 'error'); return; }
     if (cap > 0 && myBets.length >= cap) { toast(`Max ${cap} bet${cap > 1 ? 's' : ''} per period (admin limit)`, 'info'); return; }
     sfx.click();
     setBet({ type, selection });
@@ -183,11 +185,11 @@ export default function Game({ game, profile, onGame }) {
       <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 14 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.68rem', fontWeight: 800, letterSpacing: 1.2, textTransform: 'uppercase', color: 'var(--text-dim)' }}>
-            <Ic n="hash" s={12} />Current Period
+            <Ic n="hash" s={12} />{t('game.period')}
           </div>
           <div style={{ fontSize: '1.02rem', fontWeight: 900, fontFamily: 'monospace', letterSpacing: 0.5, marginTop: 4, wordBreak: 'break-all' }}>{periodId}</div>
           <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 4, display: 'flex', gap: 5, alignItems: 'center' }}>
-            <Ic n="clock" s={12} />{gameCfg.duration || 60}s · {cap > 0 ? `max ${cap} bet${cap > 1 ? 's' : ''}/period` : 'unlimited bets'}
+            <Ic n="clock" s={12} />{gameCfg.duration || 60}s · {cap > 0 ? `${t('game.max_per_period')} ${cap} ${t('game.per_period')}` : t('game.unlimited')}
           </div>
         </div>
         <div className={`timer-ring ${inCloseWindow ? 'warning' : ''}`}>
@@ -204,7 +206,7 @@ export default function Game({ game, profile, onGame }) {
           </svg>
           <div className="timer-center">
             <div className="timer-sec">{remaining > 0 ? secLeft : 0}</div>
-            <div className="timer-label"><Ic n="timer" s={11} />{remaining > 0 ? (inCloseWindow ? 'closing…' : 'left') : 'result…'}</div>
+            <div className="timer-label"><Ic n="timer" s={11} />{remaining > 0 ? (inCloseWindow ? t('game.closing') : t('game.left')) : t('game.result')}</div>
           </div>
         </div>
       </div>
@@ -212,18 +214,18 @@ export default function Game({ game, profile, onGame }) {
       {paused && (
         <div className="betting-closed" style={{ marginTop: 12 }}>
           <Ic n="wrench" s={15} />
-          {gameCfg.maintenance ? 'Under maintenance — back soon' : 'Game paused by admin'}
+          {gameCfg.maintenance ? t('game.maintenance') : t('game.paused')}
         </div>
       )}
       {!bettingOpen && !paused && !myBets.length && (
         <div className="betting-closed" style={{ marginTop: 12 }}>
-          <Ic n="lock" s={14} />Betting closed — result coming…
+          <Ic n="lock" s={14} />{t('game.betting_closed')}
         </div>
       )}
       {myBets.length > 0 && !bettingOpen && !announce && (
         <div className="card" style={{ marginTop: 12, borderColor: 'rgba(255,200,87,0.5)', background: 'linear-gradient(135deg, rgba(255,200,87,0.08), transparent)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, color: 'var(--warning)' }}>
-            <Ic n="clock" s={16} />Waiting for result — your bet{myBets.length > 1 ? 's' : ''}:
+            <Ic n="clock" s={16} />{t('game.waiting')}{myBets.length > 1 ? ' ' + t('game.bets_count') : ''}:
           </div>
           <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {myBets.map((b, i) => (
@@ -235,7 +237,7 @@ export default function Game({ game, profile, onGame }) {
 
       {/* Numbers */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="dice" s={18} />Pick a Number</div>
+        <div className="card-title"><Ic n="dice" s={18} />{t('game.pick_number')}</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
           {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
             <button key={n} className={`num ${numColor(n)}`}
@@ -246,15 +248,15 @@ export default function Game({ game, profile, onGame }) {
           ))}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-dim)', fontSize: '0.68rem', fontWeight: 700, marginTop: 10, padding: '0 4px' }}>
-          <span>Red — even</span>
-          <span>0 — Red+Violet</span>
-          <span>Green — odd</span>
+          <span>{t('game.red_even')}</span>
+          <span>{t('game.zero_rv')}</span>
+          <span>{t('game.green_odd')}</span>
         </div>
       </div>
 
       {/* Colors */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="tag" s={17} />Pick a Color</div>
+        <div className="card-title"><Ic n="tag" s={17} />{t('game.pick_color')}</div>
         <div style={{ display: 'flex', gap: 10, opacity: gameCfg.enableColor === false ? 0.35 : 1 }}>
           <button className="bet-color-btn bet-green" onClick={() => openBet('color', 'Green')}>Green<small><Ic n="percent" s={11} />{payouts.green ?? 2}×</small></button>
           <button className="bet-color-btn bet-violet" onClick={() => openBet('color', 'Violet')}>Violet<small><Ic n="percent" s={11} />{payouts.violet ?? 4.5}×</small></button>
@@ -264,7 +266,7 @@ export default function Game({ game, profile, onGame }) {
 
       {/* Size */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="swap" s={17} />Big or Small</div>
+        <div className="card-title"><Ic n="swap" s={17} />{t('game.pick_size')}</div>
         <div style={{ display: 'flex', gap: 10, opacity: gameCfg.enableSize === false ? 0.35 : 1 }}>
           <button className="bet-size" onClick={() => openBet('size', 'Big')}>BIG (5-9)<small><Ic n="percent" s={11} />{payouts.size ?? 2}×</small></button>
           <button className="bet-size" onClick={() => openBet('size', 'Small')}>SMALL (0-4)<small><Ic n="percent" s={11} />{payouts.size ?? 2}×</small></button>
@@ -273,8 +275,8 @@ export default function Game({ game, profile, onGame }) {
 
       {/* Last 50 */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="history" s={17} />Last 50 Results</div>
-        {results.length === 0 && <div className="empty"><div className="empty-icon"><Ic n="clock" s={40} /></div>First result coming soon…</div>}
+        <div className="card-title"><Ic n="history" s={17} />{t('game.last50')}</div>
+        {results.length === 0 && <div className="empty"><div className="empty-icon"><Ic n="clock" s={40} /></div>{t('game.first_result')}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 6 }}>
           {results.slice(0, 50).map((r) => (
             <div key={r.period_id} className={`num num-sm ${numColor(r.number)}`}>{r.number}</div>
@@ -284,13 +286,13 @@ export default function Game({ game, profile, onGame }) {
 
       {/* Top Winners */}
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="card-title"><Ic n="trophy" s={17} />Top Winners</div>
+        <div className="card-title"><Ic n="trophy" s={17} />{t('game.top_winners')}</div>
         {topWinners === null ? (
           <><div className="skeleton" style={{ height: 34, marginBottom: 8 }}></div>
           <div className="skeleton" style={{ height: 34, marginBottom: 8 }}></div>
           <div className="skeleton" style={{ height: 34 }}></div></>
         ) : topWinners.length === 0 ? (
-          <Empty icon="trophy" msg="Abhi koi winner nahi — pehla win aap kar sakte ho!" />
+          <Empty icon="trophy" msg={t('game.no_winner')} />
         ) : (
           topWinners.slice(0, 5).map((w, i) => (
             <div key={(w.referral_code || i) + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < 4 ? '1px solid var(--border)' : 'none' }}>
@@ -317,21 +319,21 @@ export default function Game({ game, profile, onGame }) {
               <span key={b.id || i} className="badge badge-pending">{b.selection} · {money(b.amount)}</span>
             ))}
           </div>
-          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--text-dim)' }}>Total staked: <b>{money(totalStake)}</b></div>
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--text-dim)' }}>{t('game.total_staked')}: <b>{money(totalStake)}</b></div>
         </div>
       )}
 
       {/* Bet modal */}
       {bet && (
-        <Modal title={`Bet on ${bet.selection}`} icon="target" onClose={() => setBet(null)}
+        <Modal title={`${t('game.bet_on')} ${bet.selection}`} icon="target" onClose={() => setBet(null)}
           footer={<>
-            <button className="btn btn-ghost" onClick={() => setBet(null)}>Cancel</button>
+            <button className="btn btn-ghost" onClick={() => setBet(null)}>{t('game.cancel')}</button>
             <button className="btn btn-primary" onClick={placeBet} disabled={busy}>
-              <Ic n="check" s={16} />{busy ? 'Placing…' : `Place Bet · ${amt ? money(amt) : '—'}`}
+              <Ic n="check" s={16} />{busy ? t('game.placing') : `${t('game.place_bet')} · ${amt ? money(amt) : '—'}`}
             </button>
           </>}>
           <div className="form-group">
-            <label>Amount (₹)</label>
+            <label>{t('game.amount')}</label>
             <input className="input" type="number" inputMode="numeric" placeholder={`Min ${gameCfg.minBet || 10}`}
               value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus />
           </div>
@@ -348,11 +350,11 @@ export default function Game({ game, profile, onGame }) {
             ))}
           </div>
           <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', fontWeight: 800 }}>
-            <span style={{ color: 'var(--text-dim)' }}>Potential win</span>
+            <span style={{ color: 'var(--text-dim)' }}>{t('game.potential')}</span>
             <span style={{ color: 'var(--success)' }}>{amt ? money(amt * payoutFor(bet, payouts)) : '—'}</span>
           </div>
           <div style={{ marginTop: 4, display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-dim)' }}>
-            <span>Available: {money(profile.balance)}</span>
+            <span>{t('game.available')}: {money(profile.balance)}</span>
             <span>Payout ×{payoutFor(bet, payouts)} · Period {myBets.length}{cap > 0 ? `/${cap}` : ''}</span>
           </div>
         </Modal>
@@ -365,11 +367,11 @@ export default function Game({ game, profile, onGame }) {
             <div className={`result-num ${numColor(announce.number)}`}>{announce.number}</div>
             <div className="result-title">
               {announce.won
-                ? <span className="result-win"><Ic n="trophy" s={28} />YOU WON {money(announce.winAmount)}!</span>
-                : <span className="result-lose"><Ic n="x" s={28} />You lost {money(announce.amount)}</span>}
+                ? <span className="result-win"><Ic n="trophy" s={28} />{t('game.you_won')} {money(announce.winAmount)}!</span>
+                : <span className="result-lose"><Ic n="x" s={28} />{t('game.you_lost')} {money(announce.amount)}</span>}
             </div>
             <div className="result-meta">{announce.color} · {announce.size}{announce.count > 1 ? ` · ${announce.count} bets` : ''}</div>
-            <div className="result-meta" style={{ marginTop: 10, fontSize: '0.78rem', opacity: 0.7 }}>tap anywhere to continue</div>
+            <div className="result-meta" style={{ marginTop: 10, fontSize: '0.78rem', opacity: 0.7 }}>{t('game.tap_continue')}</div>
           </div>
         </div>
       )}

@@ -23,6 +23,41 @@ export default function Analytics() {
         <StatCard label="14-Day Dep/WD" value={`${money(a.daily?.reduce((s, d) => s + Number(d.deposits), 0) || 0)} / ${money(a.daily?.reduce((s, d) => s + Number(d.withdrawals), 0) || 0)}`} tone="sc-gold" icon="wallet" />
       </div>
 
+      {/* Suspicious accounts */}
+      <div className="card" style={{ marginBottom: 14, borderColor: 'rgba(255,107,107,0.35)' }}>
+        <div className="card-title"><Ic n="flame" s={17} style={{ color: 'var(--danger)' }} />Suspicious Accounts (auto flags, last 24h)</div>
+        {(data.suspicious || []).length === 0 ? (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--success)', fontWeight: 700, fontSize: '0.88rem' }}>
+            <Ic n="shieldCheck" s={16} />No suspicious activity detected
+          </div>
+        ) : (
+          <div className="table-wrap" style={{ maxHeight: 300 }}>
+            <table className="data">
+              <thead><tr><th>User</th><th>Flags</th><th>Won 24h</th><th>Balance</th><th>Review</th></tr></thead>
+              <tbody>
+                {data.suspicious.map((x) => (
+                  <tr key={x.uid}>
+                    <td style={{ fontWeight: 800 }}>{x.name} <span style={{ color: 'var(--text-dim)', fontFamily: 'monospace', fontSize: '0.72rem' }}>{x.uid.slice(0, 8)}</span></td>
+                    <td>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {(x.flags || []).map((f) => <span key={f} className="badge badge-rejected">{f}</span>)}
+                      </div>
+                    </td>
+                    <td style={{ color: 'var(--success)', fontWeight: 800 }}>{money(x.won24h)}</td>
+                    <td>{money(x.balance)}</td>
+                    <td><button className="btn btn-ghost btn-sm" onClick={() => window.dispatchEvent(new CustomEvent('jc:goto', { detail: 'users' }))}><Ic n="users" s={13} />Users</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="card-sub" style={{ marginTop: 10, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <Ic n="info" s={13} style={{ marginTop: 2, flexShrink: 0 }} />
+          Flags: big-win-24h (₹20k+ won) · win-streak-24h (5+ wins) · high-velocity (15+ bets/hr) · big-deposits-24h (₹50k+ deposited)
+        </p>
+      </div>
+
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-title"><Ic n="calendar" s={17} />Last 14 Days (Deposits / Withdrawals / Bets)</div>
         {a.daily?.length === 0 && <Empty icon="calendar" msg="No activity yet" />}

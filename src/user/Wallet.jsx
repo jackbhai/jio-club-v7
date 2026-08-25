@@ -5,8 +5,10 @@ import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { money, fmtDT, copyText } from '../lib/utils.js';
 import QRCode from 'qrcode';
+import { t, useT, toggleLang, getLang } from '../lib/i18n.js';
 
 export default function Wallet({ game, profile, user, features }) {
+  const t = useT();
   const [tab, setTab] = useState('deposit');
   const [amount, setAmount] = useState('');
   const [ref, setRef] = useState('');
@@ -200,7 +202,7 @@ export default function Wallet({ game, profile, user, features }) {
       <div className="card" style={{ background: 'linear-gradient(135deg, rgba(124,108,255,0.18), rgba(0,200,150,0.1))', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: '0.7rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: 1, color: 'var(--text-dim)' }}>
-            <Ic n="wallet" s={13} />Available Balance
+            <Ic n="wallet" s={13} />{t('wallet.balance')}
           </div>
           <div style={{ fontSize: '2rem', fontWeight: 900, letterSpacing: -1, marginTop: 2 }}>{money(profile.balance)}</div>
         </div>
@@ -264,7 +266,7 @@ export default function Wallet({ game, profile, user, features }) {
                         {selAcc?.holder_name && <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 5 }}>A/c: {selAcc.holder_name}</div>}
                         {qr && <img src={qr} alt="UPI QR" style={{ width: 170, height: 170, margin: '12px auto 0', display: 'block', borderRadius: 14, background: '#fff', padding: 10 }} />}
                         {qr && <div style={{ color: 'var(--text-dim)', fontSize: '0.74rem', marginTop: 8, display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center' }}>
-                          <Ic n="qr" s={12} />Scan with {upi.apps?.join(', ') || 'any UPI app'}
+                          <Ic n="qr" s={12} />{t('wallet.scan')} {upi.apps?.join(', ') || 'any UPI app'}
                         </div>}
                       </div>
                     )}
@@ -276,7 +278,7 @@ export default function Wallet({ game, profile, user, features }) {
                       {shotUrl && <img src={shotUrl} alt="shot" style={{ maxHeight: 110, borderRadius: 10, marginTop: 8 }} />}
                     </Field>
                     <button className="btn btn-primary btn-block" onClick={onDeposit} disabled={busy || !depositValid || !ref.trim()}>
-                      <Ic n="checkCircle" s={16} />{busy ? 'Submitting…' : 'I Have Paid — Submit for Approval'}
+                      <Ic n="checkCircle" s={16} />{busy ? t('wallet.submitting') : t('wallet.submit')}
                     </button>
                     <p className="card-sub" style={{ marginTop: 8, display: 'flex', gap: 5, alignItems: 'center' }}>
                       <Ic n="lock" s={12} />Screenshot private storage mein jaata hai — sirf aap aur admin dekh sakte hain.
@@ -323,7 +325,7 @@ export default function Wallet({ game, profile, user, features }) {
                   </div>
                 )}
                 <button className="btn btn-success btn-block" onClick={onWithdraw} disabled={busy || !withdrawValid}>
-                  <Ic n="arrowUp" s={16} />{busy ? 'Submitting…' : `Request Withdrawal${amt ? ' · ' + money(amt) : ''}`}
+                  <Ic n="arrowUp" s={16} />{busy ? t('wallet.submitting') : `${t('wallet.request')}${amt ? ' · ' + money(amt) : ''}`}
                 </button>
                 <p className="card-sub" style={{ marginTop: 10, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
                   <Ic n="info" s={14} style={{ marginTop: 2, flexShrink: 0 }} />

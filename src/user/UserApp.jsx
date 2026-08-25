@@ -5,6 +5,7 @@ import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { getTheme, toggleTheme } from '../lib/theme.js';
 import { money, timeAgo, cx } from '../lib/utils.js';
+import { t, useT, toggleLang, getLang } from '../lib/i18n.js';
 import Auth from './Auth.jsx';
 import Game from './Game.jsx';
 import Wallet from './Wallet.jsx';
@@ -13,16 +14,8 @@ import Chat from './Chat.jsx';
 import Support from './Support.jsx';
 import Profile from './Profile.jsx';
 
-const NAV = [
-  { id: 'game', label: 'Game', ico: 'target' },
-  { id: 'wallet', label: 'Wallet', ico: 'wallet' },
-  { id: 'bets', label: 'Bets', ico: 'list' },
-  { id: 'chat', label: 'Chat', ico: 'chat' },
-  { id: 'support', label: 'Support', ico: 'headset' },
-  { id: 'profile', label: 'Profile', ico: 'user' }
-];
-
 export default function UserApp() {
+  const t = useT();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [game, setGame] = useState(null);
@@ -32,6 +25,9 @@ export default function UserApp() {
   const [announce, setAnnounce] = useState(null);
   const [booting, setBooting] = useState(true);
   const [theme, setThemeState] = useState(getTheme());
+  const [installEvt, setInstallEvt] = useState(null);
+  const [showInstall, setShowInstall] = useState(false);
+  const [reportBet, setReportBet] = useState(null);
   const prevBal = useRef(null);
   const [balBump, setBalBump] = useState(false);
 
@@ -90,6 +86,7 @@ export default function UserApp() {
     return () => { supabase.removeChannel(ch); };
   }, [user, loadGame]);
 
+  // Balance bump animation
   useEffect(() => {
     const b = profile?.balance ?? 0;
     if (prevBal.current !== null && prevBal.current !== b) {
@@ -105,6 +102,23 @@ export default function UserApp() {
     return () => window.removeEventListener('jc:theme', on);
   }, []);
 
+  // PWA install prompt
+  useEffect(() => {
+    const on = (e) => { e.preventDefault(); setInstallEvt(e); setShowInstall(true); };
+    const onInstalled = () => { setShowInstall(false); setInstallEvt(null); toast('App installed!', 'success'); };
+    window.addEventListener('beforeinstallprompt', on);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => { window.removeEventListener('beforeinstallprompt', on); window.removeEventListener('appinstalled', onInstalled); };
+  }, []);
+
+  const doInstall = async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch (e) { /* ignore */ }
+    setShowInstall(false);
+    setInstallEvt(null);
+  };
+
   async function markAllRead() {
     if (!notifs.length) return;
     const ids = notifs.filter((n) => !n.read).map((n) => n.id);
@@ -115,27 +129,31 @@ export default function UserApp() {
   if (booting) return <div className="loading-screen"><div className="spinner"></div><div>Starting…</div></div>;
   if (!user || !profile) return (<><Auth refCode={new URLSearchParams(window.location.search).get('ref')} /><Toasts /></>);
 
-  // V7-001/012 fix: operator (admin) account player UI nahi kholega
+  const NAV = [
+    { id: 'game', label: t('nav.game'), ico: 'target' },
+    { id: 'wallet', label: t('nav.wallet'), ico: 'wallet' },
+    { id: 'bets', label: t('nav.bets'), ico: 'list' },
+    { id: 'chat', label: t('nav.chat'), ico: 'chat' },
+    { id: 'support', label: t('nav.support'), ico: 'headset' },
+    { id: 'profile', label: t('nav.profile'), ico: 'user' }
+  ];
+
+  // Operator (admin) account cannot play
   if (profile.role === 'admin') {
     return (
       <div className="app-shell">
         <Toasts />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div className="card" style={{ maxWidth: 420, width: '100%', textAlign: 'center', padding: 30 }}>
-            <div style={{ width: 64, height: 64, borderRadius: 18, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(124,108,255,0.15)', color: 'var(--accent)' }}>
-              <Ic n="shield" s={32} />
+            <div style={{ width: 58, height: 58, borderRadius: 16, margin: '0 auto 14px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(124,108,255,0.15)', color: 'var(--accent)' }}>
+              <Ic n="shield" s={30} />
             </div>
-            <div style={{ fontWeight: 900, fontSize: '1.15rem', marginBottom: 8 }}>Operator Account</div>
-            <p style={{ color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.55, marginBottom: 18 }}>
-              Yeh account <b>admin/operator</b> hai — isse player ke roop me game khela nahi ja sakta
-              (role separation + audit safety).
-            </p>
-            <a className="btn btn-primary btn-block" href="#/admin">
-              <Ic n="sliders" s={16} />Open Admin Panel
-            </a>
+            <div style={{ fontWeight: 900, fontSize: '1.15rem', marginBottom: 8 }}>{t('operator.title')}</div>
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.5, marginBottom: 16 }}>{t('operator.sub')}</p>
+            <a className="btn btn-primary btn-block" href="#/admin"><Ic n="sliders" s={16} />{t('operator.open_admin')}</a>
             <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }}
               onClick={async () => { await supabase.auth.signOut(); toast('Logged out', 'info'); }}>
-              <Ic n="logout" s={15} />Logout
+              <Ic n="logout" s={15} />{t('profile.logout')}
             </button>
           </div>
         </div>
@@ -150,53 +168,71 @@ export default function UserApp() {
   return (
     <div className="app-shell">
       <Toasts />
+      {/* Install banner */}
+      {showInstall && installEvt && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 70, width: 'min(92%, 460px)' }}>
+          <div className="card" style={{ display: 'flex', gap: 10, alignItems: 'center', borderColor: 'rgba(124,108,255,0.5)', boxShadow: 'var(--shadow)' }}>
+            <Ic n="rocket" s={22} style={{ color: 'var(--accent)' }} />
+            <div style={{ flex: 1, fontSize: '0.84rem', fontWeight: 700 }}>{t('install.banner')}</div>
+            <button className="btn btn-primary btn-sm" onClick={doInstall}>{t('install.prompt')}</button>
+            <button className="icon-btn" style={{ width: 30, height: 30 }} onClick={() => setShowInstall(false)}><Ic n="x" s={14} /></button>
+          </div>
+        </div>
+      )}
+
+      {/* Topbar */}
       <div className="topbar">
-        <div className="brand"><Ic n="dice" s={19} />{appName}</div>
+        <div className="brand"><Ic n="dice" s={18} />{appName}</div>
         <div className={`balance-chip ${balBump ? 'bump' : ''}`}>
-          <Ic n="coins" s={16} />{money(profile.balance)}
+          <Ic n="coins" s={15} />{money(profile.balance)}
         </div>
         <button className="icon-btn" onClick={() => { sfx.click(); setShowNotifs(true); }} aria-label="Notifications">
-          <Ic n="bell" s={18} />{unread > 0 && <span className="dot"></span>}
+          <Ic n="bell" s={17} />{unread > 0 && <span className="dot"></span>}
+        </button>
+        <button className="icon-btn" onClick={() => { sfx.click(); toggleLang(); }} aria-label="Language" style={{ fontSize: '0.72rem', fontWeight: 900, letterSpacing: 0 }}>
+          {getLang() === 'en' ? 'हिं' : 'EN'}
         </button>
         <button className="icon-btn" onClick={() => { sfx.click(); toggleTheme(); }} aria-label="Theme">
-          <Ic n={theme === 'dark' ? 'sun' : 'moon'} s={18} />
+          <Ic n={theme === 'dark' ? 'sun' : 'moon'} s={17} />
         </button>
       </div>
 
       <div className="content page-enter" key={tab}>
-        <ErrorBoundary label={NAV.find(n => n.id === tab)?.label || tab}>
         {announce && (
           <div className={`announce-bar ${announce.priority || 'info'}`}>
-            <Ic n="megaphone" s={18} />
+            <Ic n="megaphone" s={17} />
             <div>
               <b>{announce.title}</b>
               <div style={{ fontSize: '0.78rem', opacity: 0.85 }}>{announce.body}</div>
             </div>
-            <button onClick={() => setAnnounce(null)}><Ic n="x" s={16} /></button>
+            <button onClick={() => setAnnounce(null)}><Ic n="x" s={15} /></button>
           </div>
         )}
 
+        <ErrorBoundary label={NAV.find(n => n.id === tab)?.label || tab}>
         {tab === 'game' && <Game game={game} profile={profile} onGame={setGame} />}
         {tab === 'wallet' && <Wallet game={game} profile={profile} user={user} features={features} />}
-        {tab === 'bets' && <MyBets user={user} />}
-        {tab === 'chat' && <Chat game={game} profile={profile} user={user} />}
-        {tab === 'support' && <Support user={user} />}
+        {tab === 'bets' && <MyBets user={user} onReport={(bet) => { setReportBet(bet); setTab('support'); }} />}
+        {tab === 'chat' && <Chat game={game} />}
+        {tab === 'support' && <Support user={user} reportBet={reportBet} onReportDone={() => setReportBet(null)} />}
         {tab === 'profile' && <Profile game={game} profile={profile} user={user} onProfile={setProfile} features={features} />}
         </ErrorBoundary>
       </div>
 
+      {/* Bottom nav */}
       <div className="bottomnav">
         {NAV.map((n) => (
           <button key={n.id} className={cx('nav-item', tab === n.id && 'active')} onClick={() => { sfx.click(); setTab(n.id); }}>
-            <span className="nav-ico"><Ic n={n.ico} s={21} /></span>
+            <span className="nav-ico"><Ic n={n.ico} s={20} /></span>
             {n.label}
           </button>
         ))}
       </div>
 
+      {/* Notifications modal */}
       {showNotifs && (
-        <Modal title="Notifications" icon="bell" onClose={() => setShowNotifs(false)}>
-          {notifs.length === 0 && <EmptyState />}
+        <Modal title={t('notifs.title')} icon="bell" onClose={() => setShowNotifs(false)}>
+          {notifs.length === 0 && <div className="empty"><div className="empty-icon"><Ic n="bellOff" s={38} /></div>{t('notifs.empty')}</div>}
           {notifs.map((n) => (
             <div key={n.id} className={cx('notif-item', !n.read && 'unread')}>
               <div>
@@ -208,15 +244,11 @@ export default function UserApp() {
           ))}
           {unread > 0 && (
             <div style={{ marginTop: 14 }}>
-              <button className="btn btn-ghost btn-block" onClick={markAllRead}><Ic n="check" s={15} />Mark all as read</button>
+              <button className="btn btn-ghost btn-block" onClick={markAllRead}><Ic n="check" s={14} />{t('notifs.mark_all')}</button>
             </div>
           )}
         </Modal>
       )}
     </div>
   );
-}
-
-function EmptyState() {
-  return <div className="empty"><div className="empty-icon"><Ic n="bellOff" s={40} /></div>No notifications yet</div>;
 }
