@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase, rpc } from '../../lib/supabase.js';
-import { toast, Table, StatCard, RankBadge, Toggle } from '../../components/ui.jsx';
+import { toast, Table, StatCard, RankBadge, Toggle, Empty } from '../../components/ui.jsx';
 import { Ic } from '../../lib/icons.jsx';
 import { sfx } from '../../lib/sound.js';
 import { fmtDT } from '../../lib/utils.js';
