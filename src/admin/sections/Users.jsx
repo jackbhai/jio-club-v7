@@ -27,10 +27,38 @@ export default function Users() {
   const list = (users || []).filter((u) =>
     !q || u.email?.toLowerCase().includes(q.toLowerCase()) || u.referral_code?.toLowerCase().includes(q.toLowerCase()));
 
+  async function myId() {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.user?.id || null;
+  }
+
+  // Audit trail maintain karo (RPC jaisa hi admin_logs entry)
+  async function audit(action, params) {
+    try {
+      const me = await myId();
+      await supabase.from('admin_logs').insert({ admin_id: me, action, detail: params });
+    } catch (e) { /* audit best-effort */ }
+  }
+
   async function act(action, params, okMsg) {
     setBusy(true);
     try {
-      await rpc('admin_action', { p_action: action, p_params: params });
+      if (action === 'set-rank') {
+        // Direct REST (DB me yeh RPC branch uuid=text bug se toota hai — REST path safe hai)
+        const { error } = await supabase.from('profiles').update({ rank: params.rank }).eq('id', params.uid);
+        if (error) throw error;
+        await audit('set-rank', params);
+      } else if (action === 'delete-user') {
+        const me = await myId();
+        if (params.uid === me) throw new Error('Khud ko delete nahi kar sakte');
+        const { data: tgt } = await supabase.from('profiles').select('role').eq('id', params.uid).maybeSingle();
+        if (tgt?.role === 'admin') throw new Error('Admin user delete nahi ho sakta');
+        const { error } = await supabase.from('profiles').delete().eq('id', params.uid);
+        if (error) throw error;
+        await audit('delete-user', params);
+      } else {
+        await rpc('admin_action', { p_action: action, p_params: params });
+      }
       sfx.cash(); toast(okMsg, 'success');
       load();
     } catch (e) { sfx.error(); toast(e.message, 'error'); }
