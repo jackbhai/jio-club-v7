@@ -99,10 +99,13 @@ export function Confirm({ title = 'Are you sure?', msg, onYes, onNo, danger = tr
 
 /* ---------------- Toggle ---------------- */
 export function Toggle({ checked, onChange, disabled }) {
+  // NOTE: slider pe onClick NHI hota — label+input dono fire karte hain,
+  // jisse value do baar flip hoti thi (toggle "work nahi karta" bug).
+  // Ab sirf input ka onChange use hota hai — click hamesha single-fire.
   return (
     <label className="toggle">
       <input type="checkbox" checked={!!checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
-      <span className="slider" onClick={() => !disabled && onChange(!checked)} />
+      <span className="slider" />
     </label>
   );
 }
