@@ -42,12 +42,21 @@ export default function GameControl() {
     setGameCfg((d) => ({ ...d, [key]: value }));
   }
 
-  async function save(msg) {
+  async function save(msg, override) {
     setBusy(true);
-    const { error } = await supabase.from('settings').update({ value: gameCfg }).eq('key', 'game');
+    const { error } = await supabase.from('settings').update({ value: override ?? gameCfg }).eq('key', 'game');
     setBusy(false);
     if (error) { sfx.error(); toast(error.message, 'error'); return; }
     sfx.cash(); toast(msg || 'Game settings saved — live abhi', 'success');
+  }
+
+  // Win-probability mode change — turant save (bina Save button ke)
+  async function changeMode(m) {
+    if ((g.winMode || 'random') === m.id) return;
+    const next = { ...g, winMode: m.id };
+    setGameCfg(next);
+    sfx.click();
+    await save(`Mode: ${m.title} — agle period se live`, next);
   }
 
   async function doForceResult(n) {
@@ -113,7 +122,7 @@ export default function GameControl() {
         </p>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {MODES.map((m) => (
-            <div key={m.id} className={`mode-card ${mode === m.id ? 'selected' : ''}`} onClick={() => { set('winMode', m.id); sfx.click(); }}>
+            <div key={m.id} className={`mode-card ${mode === m.id ? 'selected' : ''}`} onClick={() => changeMode(m)}>
               <div className="mc-title"><Ic n={m.icon} s={18} />{m.title}</div>
               <div className="mc-desc">{m.desc}</div>
             </div>

@@ -17,14 +17,22 @@ function useSettings() {
   }, []);
   useEffect(() => { load(); }, [load]);
   const set = (key, patch) => setData((d) => ({ ...d, [key]: { ...d[key], ...patch } }));
-  const save = async (key, msg) => {
-    const clean = Object.fromEntries(Object.entries(data[key] || {}).filter(([k, v]) => k !== 'undefined' && v !== undefined));
+  const save = async (key, msg, override) => {
+    const src = override ?? data[key] ?? {};
+    const clean = Object.fromEntries(Object.entries(src).filter(([k, v]) => k !== 'undefined' && v !== undefined));
     const { error } = await supabase.from('settings').upsert({ key, value: clean }, { onConflict: 'key' });
     if (error) { sfx.error(); toast(error.message, 'error'); return false; }
     sfx.cash(); toast(msg || `Saved ${key}`, 'success');
     return true;
   };
-  return { data, set, save, load };
+  // Toggle ke liye instant save — flip karte hi live (stale-state safe)
+  const toggleSave = (key, field, value, msg) => {
+    const next = { ...(data[key] || {}), [field]: value };
+    set(key, { [field]: value });
+    sfx.click();
+    save(key, msg, next);
+  };
+  return { data, set, save, toggleSave, load };
 }
 
 function Shell({ icon, title, sub, children, saveBtn }) {
@@ -57,15 +65,15 @@ const SaveBtn = ({ onClick, disabled }) => (
 
 /* ============ 1. FEATURES (1:1 user-panel control) ============ */
 export function FeaturesSection() {
-  const { data, set, save } = useSettings();
+  const { data, toggleSave, save } = useSettings();
   if (!data) return <div className="spinner"></div>;
   const f = data.features || {};
   return (
-    <Shell icon="toggle" title="Features — 1:1 User Panel Control" sub="Yahan on/off karo — user panel mein turant reflect (realtime).">
-      <Row label="Deposit" desc="UPI deposit, QR, screenshots, UTR"><Toggle checked={f.deposit !== false} onChange={(v) => set('features', { deposit: v })} /></Row>
-      <Row label="Withdrawal" desc="Withdrawal requests"><Toggle checked={f.withdraw !== false} onChange={(v) => set('features', { withdraw: v })} /></Row>
-      <Row label="Coupons" desc="Coupon claim box in wallet"><Toggle checked={f.coupons !== false} onChange={(v) => set('features', { coupons: v })} /></Row>
-      <Row label="Referral System" desc="Referral links + rank dashboard"><Toggle checked={f.referral !== false} onChange={(v) => set('features', { referral: v })} /></Row>
+    <Shell icon="toggle" title="Features — 1:1 User Panel Control" sub="Toggle flip karte hi save ho jata hai — user panel mein turant reflect (realtime).">
+      <Row label="Deposit" desc="UPI deposit, QR, screenshots, UTR"><Toggle checked={f.deposit !== false} onChange={(v) => toggleSave('features', 'deposit', v, `Deposit ${v ? 'ON' : 'OFF'} — live`)} /></Row>
+      <Row label="Withdrawal" desc="Withdrawal requests"><Toggle checked={f.withdraw !== false} onChange={(v) => toggleSave('features', 'withdraw', v, `Withdraw ${v ? 'ON' : 'OFF'} — live`)} /></Row>
+      <Row label="Coupons" desc="Coupon claim box in wallet"><Toggle checked={f.coupons !== false} onChange={(v) => toggleSave('features', 'coupons', v, `Coupons ${v ? 'ON' : 'OFF'} — live`)} /></Row>
+      <Row label="Referral System" desc="Referral links + rank dashboard"><Toggle checked={f.referral !== false} onChange={(v) => toggleSave('features', 'referral', v, `Referral ${v ? 'ON' : 'OFF'} — live`)} /></Row>
       <SaveBtn onClick={() => save('features', 'Features saved — user panel updated')} />
     </Shell>
   );
@@ -300,7 +308,7 @@ export function PaymentsSection() {
 
 /* ============ 6. COMMUNITY (chat + notifications) ============ */
 export function CommunitySection() {
-  const { data, set, save } = useSettings();
+  const { data, set, save, toggleSave } = useSettings();
   const [busy, setBusy] = useState(false);
   if (!data) return <div className="spinner"></div>;
   const c = data.chat || {};
@@ -309,13 +317,13 @@ export function CommunitySection() {
     <div className="page-enter">
       <div className="card" style={{ marginBottom: 14 }}>
         <div className="card-title"><Ic n="chat" s={17} />Community Chat (public)</div>
-        <Row label="Public Chat Enabled" desc="User-to-user live chat"><Toggle checked={c.enabled !== false} onChange={(v) => set('chat', { enabled: v })} /></Row>
+        <Row label="Public Chat Enabled" desc="User-to-user live chat"><Toggle checked={c.enabled !== false} onChange={(v) => toggleSave('chat', 'enabled', v, `Public chat ${v ? 'ON' : 'OFF'} — live`)} /></Row>
         <NumRow label="Max Message Length" value={c.maxMessage ?? 500} onChange={(v) => set('chat', { maxMessage: v })} />
         <SaveBtn onClick={() => save('chat', 'Chat settings saved')} />
       </div>
       <div className="card">
         <div className="card-title"><Ic n="bell" s={17} />Notifications</div>
-        <Row label="Push/Bell Notifications" desc="User notifications + admin broadcasts"><Toggle checked={n.enabled !== false} onChange={(v) => set('notifications', { enabled: v })} /></Row>
+        <Row label="Push/Bell Notifications" desc="User notifications + admin broadcasts"><Toggle checked={n.enabled !== false} onChange={(v) => toggleSave('notifications', 'enabled', v, `Notifications ${v ? 'ON' : 'OFF'} — live`)} /></Row>
         <SaveBtn onClick={() => save('notifications', 'Notification settings saved')} />
       </div>
     </div>
@@ -352,19 +360,21 @@ export function AppearanceSection() {
 
 /* ============ 8. SOUNDS ============ */
 export function SoundsSection() {
-  const { data, set, save } = useSettings();
+  const { data, set, save, toggleSave } = useSettings();
   if (!data) return <div className="spinner"></div>;
   const s = data.sounds || {};
   return (
-    <Shell icon="volume" title="Sounds (global default)">
-      <Row label="Sound Effects"><Toggle checked={s.enabled !== false} onChange={(v) => set('sounds', { enabled: v })} /></Row>
+    <Shell icon="volume" title="Sounds (global default)" sub="Toggle flip karte hi save hota hai. Yeh SAB users ka default hai — user apna apna volume Profile me set kar sakta hai.">
+      <Row label="Sound Effects"><Toggle checked={s.enabled !== false} onChange={(v) => toggleSave('sounds', 'enabled', v, `Sounds ${v ? 'ON' : 'OFF'} — live`)} /></Row>
       <Row label="Volume">
-        <input type="range" min="0" max="1" step="0.05" style={{ width: 160 }} value={s.volume ?? 0.5} onChange={(e) => set('sounds', { volume: Number(e.target.value) })} />
+        <input type="range" min="0" max="1" step="0.05" style={{ width: 160 }} value={s.volume ?? 0.5}
+          onChange={(e) => set('sounds', { volume: Number(e.target.value) })}
+          onMouseUp={() => save('sounds', 'Volume saved — live')} onTouchEnd={() => save('sounds', 'Volume saved — live')} />
         <span style={{ fontSize: '0.8rem', width: 34 }}>{Math.round((s.volume ?? 0.5) * 100)}%</span>
       </Row>
-      <Row label="Timer Tick (last 5s)"><Toggle checked={s.tick !== false} onChange={(v) => set('sounds', { tick: v })} /></Row>
-      <Row label="Win Jingle"><Toggle checked={s.win !== false} onChange={(v) => set('sounds', { win: v })} /></Row>
-      <Row label="Lose Sound"><Toggle checked={s.lose !== false} onChange={(v) => set('sounds', { lose: v })} /></Row>
+      <Row label="Timer Tick (last 5s)"><Toggle checked={s.tick !== false} onChange={(v) => toggleSave('sounds', 'tick', v, `Tick ${v ? 'ON' : 'OFF'} — live`)} /></Row>
+      <Row label="Win Jingle"><Toggle checked={s.win !== false} onChange={(v) => toggleSave('sounds', 'win', v, `Win sound ${v ? 'ON' : 'OFF'} — live`)} /></Row>
+      <Row label="Lose Sound"><Toggle checked={s.lose !== false} onChange={(v) => toggleSave('sounds', 'lose', v, `Lose sound ${v ? 'ON' : 'OFF'} — live`)} /></Row>
       <SaveBtn onClick={() => save('sounds', 'Sound settings saved')} />
     </Shell>
   );

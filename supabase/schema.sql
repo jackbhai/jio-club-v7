@@ -957,6 +957,7 @@ declare
   v_id    bigint;
   v_str   text;
   v_row   record;
+  v_newbal numeric;
   v_out   jsonb := '{}'::jsonb;
 begin
   if auth.uid() is null then raise exception 'unauthorized'; end if;
@@ -965,14 +966,18 @@ begin
   insert into public.admin_logs (admin_id, action, detail) values (auth.uid(), p_action, p_params);
 
   if p_action = 'adjust-balance' then
-    v_uid := p_params->>'uid'; v_id := null;
-    update public.profiles set balance = balance + coalesce((p_params->>'delta')::numeric, 0)
-    where id = v_uid
-    returning balance into v_row;
+    v_uid := p_params->>'uid';
+    select balance + coalesce((p_params->>'delta')::numeric, 0) into v_newbal
+    from public.profiles where id = v_uid;
     if not found then raise exception 'user not found'; end if;
+    update public.profiles set balance = v_newbal where id = v_uid;
+    insert into public.wallet_ledger (uid, type, amount, balance_after, ref, note)
+    values (v_uid, 'adjust', coalesce((p_params->>'delta')::numeric, 0), v_newbal, 'ADJ', coalesce(p_params->>'reason', 'manual adjustment'));
     insert into public.notifications (uid, title, body)
     values (v_uid, 'Balance Updated', coalesce(p_params->>'reason', 'Admin adjusted your balance'));
-    v_out := jsonb_build_object('balance', v_row);
+    perform public.notify_admin('Balance Adjusted',
+      left(v_uid::text, 8) || ': ' || coalesce(p_params->>'delta','') || ' (' || coalesce(p_params->>'reason','manual') || ') → ' || v_newbal, 'default');
+    v_out := jsonb_build_object('balance', v_newbal);
 
   elsif p_action = 'set-status' then
     v_uid := p_params->>'uid';
@@ -983,11 +988,11 @@ begin
     v_out := jsonb_build_object('status', p_params->>'status');
 
   elsif p_action = 'set-rank' then
-    update public.profiles set rank = p_params->>'rank' where id = p_params->>'uid';
+    update public.profiles set rank = p_params->>'rank' where id = (p_params->>'uid')::uuid;
     v_out := jsonb_build_object('rank', p_params->>'rank');
 
   elsif p_action = 'set-role' then
-    update public.profiles set role = p_params->>'role' where id = p_params->>'uid';
+    update public.profiles set role = p_params->>'role' where id = (p_params->>'uid')::uuid;
     v_out := jsonb_build_object('role', p_params->>'role');
 
   elsif p_action = 'force-result' then
@@ -995,10 +1000,15 @@ begin
     v_out := jsonb_build_object('forced', p_params->'number');
 
   elsif p_action = 'set-game' then
-    update public.settings
-    set value = value || p_params
-    where key = 'game';
+    update public.settings set value = value || p_params where key = 'game';
     v_out := jsonb_build_object('saved', true);
+
+  elsif p_action = 'tick-now' then
+    perform public.tick_game();
+    v_out := jsonb_build_object('ok', true);
+
+  elsif p_action = 'backfill-ledger' then
+    v_out := public.ledger_backfill();
 
   elsif p_action = 'approve-deposit' then
     v_id := (p_params->>'id')::bigint;
@@ -1007,7 +1017,11 @@ begin
     returning uid, amount into v_row;
     if not found then raise exception 'deposit not found or not pending'; end if;
     update public.profiles set balance = balance + v_row.amount, total_deposits = total_deposits + v_row.amount where id = v_row.uid;
+    select balance into v_newbal from public.profiles where id = v_row.uid;
+    insert into public.wallet_ledger (uid, type, amount, balance_after, ref, note)
+    values (v_row.uid, 'deposit', v_row.amount, v_newbal, 'DEP-' || v_id, 'deposit approved');
     insert into public.notifications (uid, title, body) values (v_row.uid, 'Deposit Approved', '₹' || v_row.amount || ' added to your wallet.');
+    perform public.notify_admin('Deposit Approved', '₹' || v_row.amount || ' · user ' || left(v_row.uid::text, 8), 'default');
     v_out := jsonb_build_object('approved', v_row.amount);
 
   elsif p_action = 'reject-deposit' then
@@ -1017,6 +1031,7 @@ begin
     returning uid into v_row;
     if not found then raise exception 'deposit not found or not pending'; end if;
     insert into public.notifications (uid, title, body) values (v_row.uid, 'Deposit Rejected', coalesce(p_params->>'note','Please contact support.'));
+    perform public.notify_admin('Deposit Rejected', 'user ' || left(v_row.uid::text, 8) || ' · ' || coalesce(p_params->>'note',''), 'default');
     v_out := jsonb_build_object('rejected', true);
 
   elsif p_action = 'bulk-approve-deposits' then
@@ -1037,7 +1052,11 @@ begin
     returning uid, amount into v_row;
     if not found then raise exception 'withdrawal not found or not pending'; end if;
     update public.profiles set total_withdrawn = total_withdrawn + v_row.amount where id = v_row.uid;
+    select balance into v_newbal from public.profiles where id = v_row.uid;
+    insert into public.wallet_ledger (uid, type, amount, balance_after, ref, note)
+    values (v_row.uid, 'withdraw_paid', 0, v_newbal, 'WD-' || v_id, 'withdrawal paid (already locked)');
     insert into public.notifications (uid, title, body) values (v_row.uid, 'Withdrawal Processed', '₹' || v_row.amount || ' sent to your UPI.');
+    perform public.notify_admin('Withdrawal Paid', '₹' || v_row.amount || ' · user ' || left(v_row.uid::text, 8), 'default');
     v_out := jsonb_build_object('approved', v_row.amount);
 
   elsif p_action = 'reject-withdrawal' then
@@ -1047,7 +1066,11 @@ begin
     returning uid, amount into v_row;
     if not found then raise exception 'withdrawal not found or not pending'; end if;
     update public.profiles set balance = balance + v_row.amount where id = v_row.uid;
+    select balance into v_newbal from public.profiles where id = v_row.uid;
+    insert into public.wallet_ledger (uid, type, amount, balance_after, ref, note)
+    values (v_row.uid, 'refund', v_row.amount, v_newbal, 'WD-' || v_id, 'withdrawal rejected + refunded');
     insert into public.notifications (uid, title, body) values (v_row.uid, 'Withdrawal Rejected', '₹' || v_row.amount || ' refunded. ' || coalesce(p_params->>'note',''));
+    perform public.notify_admin('Withdrawal Rejected + Refund', '₹' || v_row.amount || ' · user ' || left(v_row.uid::text, 8), 'default');
     v_out := jsonb_build_object('refunded', v_row.amount);
 
   elsif p_action = 'delete-withdrawal' then
@@ -1096,7 +1119,7 @@ begin
     v_out := jsonb_build_object('deleted', true);
 
   elsif p_action = 'notify-user' then
-    insert into public.notifications (uid, title, body) values (p_params->>'uid', p_params->>'title', coalesce(p_params->>'body',''));
+    insert into public.notifications (uid, title, body) values ((p_params->>'uid')::uuid, p_params->>'title', coalesce(p_params->>'body',''));
     v_out := jsonb_build_object('ok', true);
 
   elsif p_action = 'broadcast' then
@@ -1115,18 +1138,22 @@ begin
     delete from public.chats;
     v_out := jsonb_build_object('ok', true);
 
-  elsif p_action = 'tick-now' then
-    perform public.tick_game();
-    v_out := jsonb_build_object('ok', true);
-
   elsif p_action = 'recompute-ranks' then
+    with rc as (
+      select p2.id, count(c.id) as cnt
+      from public.profiles p2
+      left join public.profiles c on c.referred_by = p2.id
+      group by p2.id
+    )
     update public.profiles p set
-      referral_count = (select count(*) from public.profiles c where c.referred_by = p.id),
-      rank = public.rank_for_count((select count(*) from public.profiles c where c.referred_by = p.id));
+      referral_count = rc.cnt,
+      rank = public.rank_for_count(rc.cnt)
+    from rc
+    where p.id = rc.id;
     v_out := jsonb_build_object('ok', true);
 
   elsif p_action = 'delete-user' then
-    delete from public.profiles where id = p_params->>'uid' and role <> 'admin';
+    delete from public.profiles where id = (p_params->>'uid')::uuid and role <> 'admin';
     v_out := jsonb_build_object('deleted', found);
 
   else

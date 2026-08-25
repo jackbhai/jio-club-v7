@@ -1,7 +1,14 @@
 // WebAudio-based sound engine — zero audio files, pure synth.
+// Global defaults aata hai admin ke 'sounds' settings se; user apna apna
+// choice device pe (localStorage) save karta hai — woh global se priority pata hai.
 let ctx = null;
 let enabled = true;
 let volume = 0.5;
+let defEnabled = true;
+let defVolume = 0.5;
+
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
 
 function ac() {
   if (!ctx) {
@@ -30,10 +37,33 @@ function tone(freq, start, dur, type = 'sine', vol = 1) {
 }
 
 export const sfx = {
-  init(settings) { if (settings) { enabled = !!settings.enabled; volume = Number(settings.volume) || 0.5; } },
-  setEnabled(v) { enabled = !!v; },
-  setVolume(v) { volume = Number(v) || 0; },
+  // Admin ke global defaults set karo; user ka saved choice override karta hai.
+  init(settings) {
+    if (settings) {
+      defEnabled = settings.enabled !== false;
+      const v = Number(settings.volume);
+      defVolume = Number.isFinite(v) && v >= 0 ? v : 0.5;
+    }
+    this.applyLocal();
+  },
+  // User ka device-level choice global default pe priority dete hai.
+  applyLocal() {
+    const s = lsGet('jc-sound');
+    const v = lsGet('jc-volume');
+    enabled = (s !== null) ? s === '1' : defEnabled;
+    const pv = Number(v);
+    volume = (v !== null && v !== '' && Number.isFinite(pv) && pv >= 0) ? pv : defVolume;
+  },
+  setEnabled(v, persist = true) {
+    enabled = !!v;
+    if (persist) lsSet('jc-sound', v ? '1' : '0');
+  },
+  setVolume(v, persist = true) {
+    volume = Number(v) || 0;
+    if (persist) lsSet('jc-volume', String(volume));
+  },
   isEnabled: () => enabled,
+  getVolume: () => volume,
   click()  { tone(620, 0, 0.05, 'square', 0.12); },
   tick()   { tone(920, 0, 0.045, 'sine', 0.22); },
   win()    { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, i * 0.085, 0.28, 'triangle', 0.3)); },

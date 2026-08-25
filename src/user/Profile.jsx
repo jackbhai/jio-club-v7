@@ -7,6 +7,11 @@ import { money, fmtDT, copyText } from '../lib/utils.js';
 import { t, useT } from '../lib/i18n.js';
 import { getTheme, setTheme } from '../lib/theme.js';
 
+const PLATFORM_ICO = {
+  telegram: 'send', whatsapp: 'chat', discord: 'users', instagram: 'image',
+  youtube: 'play', website: 'globe', custom: 'link'
+};
+
 export default function Profile({ game, profile, user, onProfile, features }) {
   const t = useT();
   const [refd, setRefd] = useState(null);
@@ -15,6 +20,9 @@ export default function Profile({ game, profile, user, onProfile, features }) {
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   const [theme, setThemeState] = useState(getTheme());
+  const [links, setLinks] = useState([]);
+  const [vol, setVol] = useState(() => sfx.getVolume());
+  const [sndOn, setSndOn] = useState(() => sfx.isEnabled());
 
   const appName = game?.appearance?.appName || 'JIO CLUB';
   const refLink = `${window.location.origin}${window.location.pathname}?ref=${profile.referral_code}`;
@@ -23,6 +31,15 @@ export default function Profile({ game, profile, user, onProfile, features }) {
   useEffect(() => {
     rpc('referral_dashboard').then(setRefd).catch(() => {});
   }, [profile.referral_count]);
+
+  // Links directory (admin se manage hote hain) — profile me cards ke roop me
+  useEffect(() => {
+    supabase.from('public_links').select('*').eq('active', true)
+      .order('pinned', { ascending: false })
+      .order('sort_order')
+      .then(({ data }) => setLinks(data || []))
+      .catch(() => setLinks([]));
+  }, []);
 
   useEffect(() => {
     const on = (e) => setThemeState(e.detail);
@@ -112,6 +129,44 @@ export default function Profile({ game, profile, user, onProfile, features }) {
           <div style={{ fontFamily: 'monospace', fontWeight: 800, fontSize: '0.8rem', marginTop: 2 }}>{(user.id || '').slice(0, 8).toUpperCase()}</div>
         </div>
       </div>
+
+      {/* Links directory — cards (admin panel > Links Directory se manage) */}
+      {links.length > 0 && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="card-title"><Ic n="link" s={17} />Links</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 10 }}>
+            {links.map((l) => (
+              <a key={l.id} href={l.url} target="_blank" rel="noreferrer"
+                onClick={() => sfx.click()}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px',
+                  borderRadius: 12, textDecoration: 'none',
+                  background: 'rgba(124,108,255,0.08)', border: '1px solid rgba(124,108,255,0.22)',
+                  transition: 'transform .15s ease, box-shadow .15s ease'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.18)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}>
+                <span style={{
+                  width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'linear-gradient(135deg, rgba(124,108,255,0.25), rgba(0,200,150,0.18))',
+                  color: 'var(--accent, #7c6cff)'
+                }}><Ic n={PLATFORM_ICO[l.platform] || 'link'} s={18} /></span>
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontWeight: 800, fontSize: '0.86rem', color: 'var(--text, #fff)' }}>
+                    {l.pinned && <Ic n="star" s={11} style={{ color: 'var(--gold, #f5b301)', flexShrink: 0 }} />}
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.title}</span>
+                  </span>
+                  {l.description && (
+                    <span style={{ display: 'block', fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.description}</span>
+                  )}
+                </span>
+                <Ic n="external" s={13} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Referral card */}
       {referralOn && (
@@ -236,9 +291,25 @@ export default function Profile({ game, profile, user, onProfile, features }) {
         </div>
         <div className="setting-row">
           <div><div className="s-label">{t('profile.sound')}</div><div className="s-desc">{t('profile.sound_sub')}</div></div>
-          <button className="btn btn-ghost btn-sm" onClick={() => { const v = !sfx.isEnabled(); sfx.setEnabled(v); try { localStorage.setItem('jc-sound', v ? '1' : '0'); } catch (e) {} toast(v ? 'Sound ON' : 'Sound OFF', 'info'); }}>
-            <Ic n={sfx.isEnabled() ? 'volume' : 'volumeOff'} s={15} />{sfx.isEnabled() ? 'On' : 'Off'}
+          <button className="btn btn-ghost btn-sm" onClick={() => {
+            const v = !sfx.isEnabled();
+            sfx.setEnabled(v);
+            setSndOn(v);
+            sfx.click();
+            toast(v ? 'Sound ON' : 'Sound OFF', 'info');
+          }}>
+            <Ic n={sndOn ? 'volume' : 'volumeOff'} s={15} />{sndOn ? 'On' : 'Off'}
           </button>
+        </div>
+        <div className="setting-row">
+          <div><div className="s-label">Volume</div><div className="s-desc">Aapke device ka sound level</div></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: 165 }}>
+            <input type="range" min="0" max="1" step="0.05"
+              value={vol} onChange={(e) => { const v = Number(e.target.value); sfx.setVolume(v); setVol(v); }}
+              onMouseUp={() => sfx.click()} onTouchEnd={() => sfx.click()}
+              style={{ flex: 1 }} />
+            <span style={{ fontSize: '0.75rem', width: 36, textAlign: 'right', color: 'var(--text-dim)', fontWeight: 700 }}>{Math.round(vol * 100)}%</span>
+          </div>
         </div>
         <div className="setting-row">
           <div><div className="s-label">{t('profile.change_pw')}</div><div className="s-desc">{t('profile.change_pw_sub')}</div></div>
