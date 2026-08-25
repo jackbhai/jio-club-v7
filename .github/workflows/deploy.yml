@@ -26,6 +26,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - uses: actions/configure-pages@v5
+        with:
+          # Agar Pages site exist na kare toh yeh khud "GitHub Actions"
+          # source se bana deta hai (branch-source 404/raw-content bug fix)
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
