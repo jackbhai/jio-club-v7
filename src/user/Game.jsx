@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase, rpc } from '../lib/supabase.js';
-import { Modal, toast, Confetti } from '../components/ui.jsx';
+import { Modal, toast, Confetti, Empty, RankBadge } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { money, numColor } from '../lib/utils.js';
@@ -35,6 +35,7 @@ export default function Game({ game, profile, onGame }) {
   const [busy, setBusy] = useState(false);
   const [announce, setAnnounce] = useState(null);
   const [confetti, setConfetti] = useState(false);
+  const [topWinners, setTopWinners] = useState(null);
   const lastTickSec = useRef(-1);
   const announcedRef = useRef(null); // periodId already announced
 
@@ -57,6 +58,16 @@ export default function Game({ game, profile, onGame }) {
     const iv = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(iv);
   }, []);
+
+  // Top Winners leaderboard
+  const loadWinners = useCallback(() => {
+    rpc('leaderboard_top', { p_limit: 10 }).then((d) => setTopWinners(d?.topWinners || [])).catch(() => setTopWinners([]));
+  }, []);
+  useEffect(() => {
+    loadWinners();
+    const iv = setInterval(loadWinners, 60000);
+    return () => clearInterval(iv);
+  }, [loadWinners]);
 
   const totalMs = Math.max(1, Math.min(remaining, durMs));
   const secLeft = Math.max(0, Math.ceil(remaining / 1000));
@@ -269,6 +280,30 @@ export default function Game({ game, profile, onGame }) {
             <div key={r.period_id} className={`num num-sm ${numColor(r.number)}`}>{r.number}</div>
           ))}
         </div>
+      </div>
+
+      {/* Top Winners */}
+      <div className="card" style={{ marginTop: 12 }}>
+        <div className="card-title"><Ic n="trophy" s={17} />Top Winners</div>
+        {topWinners === null ? (
+          <><div className="skeleton" style={{ height: 34, marginBottom: 8 }}></div>
+          <div className="skeleton" style={{ height: 34, marginBottom: 8 }}></div>
+          <div className="skeleton" style={{ height: 34 }}></div></>
+        ) : topWinners.length === 0 ? (
+          <Empty icon="trophy" msg="Abhi koi winner nahi — pehla win aap kar sakte ho!" />
+        ) : (
+          topWinners.slice(0, 5).map((w, i) => (
+            <div key={(w.referral_code || i) + i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i < 4 ? '1px solid var(--border)' : 'none' }}>
+              <div style={{ width: 28, height: 28, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                background: i === 0 ? 'rgba(255,200,87,0.15)' : 'var(--card-2)', color: i === 0 ? 'var(--warning)' : 'var(--text-dim)', fontWeight: 900 }}>
+                {i === 0 ? <Ic n="crown" s={15} /> : i + 1}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 800, fontSize: '0.88rem' }}>{w.name}</div>
+              <RankBadge rank={w.rank} small />
+              <b style={{ color: 'var(--success)', fontSize: '0.88rem' }}>{money(w.won)}</b>
+            </div>
+          ))
+        )}
       </div>
 
       {/* My bets this period (multiple supported) */}
