@@ -1,9 +1,10 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, rpc } from '../../lib/supabase.js';
 import { toast, Field, Toggle, Modal, Confirm, Empty } from '../../components/ui.jsx';
 import { Ic } from '../../lib/icons.jsx';
 import { sfx } from '../../lib/sound.js';
 import QRCode from 'qrcode';
+import { copyText } from '../../lib/utils.js';
 
 /* ============ shared settings loader ============ */
 function useSettings() {

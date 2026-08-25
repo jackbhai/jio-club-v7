@@ -53,7 +53,7 @@ export default function Users() {
   function doAdjust() {
     const delta = parseFloat(adjAmt);
     if (!delta) { toast('Enter non-zero amount (+/-)', 'error'); return; }
-    act('adjust-balance', { uid: adj.uid, delta, reason: adjReason || 'Manual adjustment' }, `Balance ${delta > 0 ? '+' : ''}${money(delta)} → user`);
+    act('adjust-balance', { uid: adj.id, delta, reason: adjReason || 'Manual adjustment' }, `Balance ${delta > 0 ? '+' : ''}${money(delta)} → user`);
     setAdj(null); setAdjAmt(''); setAdjReason('');
   }
 

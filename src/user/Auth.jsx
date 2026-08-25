@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase, rpc } from '../lib/supabase.js';
 import { toast, Field } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';

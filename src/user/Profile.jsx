@@ -4,6 +4,7 @@ import { toast, Field, StatCard, RankBadge, Toggle } from '../components/ui.jsx'
 import { Ic, RANK_ICONS } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { money, fmtDT, copyText } from '../lib/utils.js';
+import { t, useT } from '../lib/i18n.js';
 import { getTheme, setTheme } from '../lib/theme.js';
 
 export default function Profile({ game, profile, user, onProfile, features }) {
