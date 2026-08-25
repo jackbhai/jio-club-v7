@@ -36,6 +36,14 @@ export default function Deposits() {
   }
 
   function approve(d) { act('approve-deposit', { id: d.id }, `Deposit ${money(d.amount)} approved`); }
+
+  // V7-004 fix: private bucket → admin ko bhi signed URL se hi dikhana hai
+  async function viewShot(path) {
+    if (!path) return;
+    const { data, error } = await supabase.storage.from('screenshots').createSignedUrl(path, 300);
+    if (error) { toast('Screenshot open failed: ' + error.message, 'error'); return; }
+    window.open(data.signedUrl, '_blank', 'noopener');
+  }
   function bulkApprove() {
     const ids = Object.entries(sel).filter(([k, v]) => v).map(([k]) => Number(k));
     if (!ids.length) { toast('Select deposits first', 'error'); return; }
@@ -83,7 +91,7 @@ export default function Deposits() {
               <td>{d.payment_mode === 'razorpay' ? <span style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}><Ic n="zap" s={13} />Razorpay</span> : 'UPI'}</td>
               <td><span className={`badge badge-${d.status}`}>{d.status}</span></td>
               <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{d.upi_ref || '—'}</td>
-              <td>{d.screenshot_url ? <a href={d.screenshot_url} target="_blank" rel="noreferrer"><Ic n="image" s={16} /></a> : '—'}</td>
+              <td>{d.screenshot_url ? <button onClick={() => viewShot(d.screenshot_url)} title="View (signed URL, 5 min)"><Ic n="image" s={16} /></button> : '—'}</td>
               <td style={{ maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis' }}>{d.note || '—'}</td>
               <td>{fmtDT(d.created_at)}</td>
               <td>

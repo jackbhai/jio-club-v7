@@ -83,11 +83,18 @@ export default function Results() {
 
       {rows && list.length > 0 && (
         <div className="card">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(10, 1fr)', gap: 8 }}>
+          <div className="card-title" style={{ marginTop: 4 }}><Ic n="list" s={16} />Result Log (full period IDs)</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {list.slice(0, 100).map((r) => (
-              <div key={r.period_id} style={{ textAlign: 'center' }}>
-                <div className={`num num-sm ${numColor(r.number)}`} style={{ width: 34, height: 34, margin: '0 auto' }}>{r.number}</div>
-                <div style={{ fontSize: '0.62rem', color: 'var(--text-dim)', fontFamily: 'monospace', marginTop: 3 }}>{r.period_id.slice(-4)}</div>
+              <div key={r.period_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid var(--border)' }}>
+                <div className={`num num-sm ${numColor(r.number)}`} style={{ width: 32, height: 32, flexShrink: 0 }}>{r.number}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: 'monospace', fontSize: '0.82rem', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.period_id}</div>
+                  <div style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>{r.color} · {r.size} · {new Date(r.created_at).toLocaleString('en-IN')}</div>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={async () => { await navigator.clipboard?.writeText(r.period_id).catch(() => {}); toast('Period ID copied', 'success'); }}>
+                  <Ic n="copy" s={13} />
+                </button>
               </div>
             ))}
           </div>

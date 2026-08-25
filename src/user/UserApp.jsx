@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase, rpc } from '../lib/supabase.js';
-import { Toasts, toast, Modal } from '../components/ui.jsx';
+import { Toasts, toast, Modal, ErrorBoundary } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { getTheme, toggleTheme } from '../lib/theme.js';
@@ -113,6 +113,34 @@ export default function UserApp() {
   if (booting) return <div className="loading-screen"><div className="spinner"></div><div>Starting…</div></div>;
   if (!user || !profile) return (<><Auth refCode={new URLSearchParams(window.location.search).get('ref')} /><Toasts /></>);
 
+  // V7-001/012 fix: operator (admin) account player UI nahi kholega
+  if (profile.role === 'admin') {
+    return (
+      <div className="app-shell">
+        <Toasts />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="card" style={{ maxWidth: 420, width: '100%', textAlign: 'center', padding: 30 }}>
+            <div style={{ width: 64, height: 64, borderRadius: 18, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(124,108,255,0.15)', color: 'var(--accent)' }}>
+              <Ic n="shield" s={32} />
+            </div>
+            <div style={{ fontWeight: 900, fontSize: '1.15rem', marginBottom: 8 }}>Operator Account</div>
+            <p style={{ color: 'var(--text-dim)', fontSize: '0.88rem', lineHeight: 1.55, marginBottom: 18 }}>
+              Yeh account <b>admin/operator</b> hai — isse player ke roop me game khela nahi ja sakta
+              (role separation + audit safety).
+            </p>
+            <a className="btn btn-primary btn-block" href="#/admin">
+              <Ic n="sliders" s={16} />Open Admin Panel
+            </a>
+            <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }}
+              onClick={async () => { await supabase.auth.signOut(); toast('Logged out', 'info'); }}>
+              <Ic n="logout" s={15} />Logout
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const appName = game?.appearance?.appName || 'JIO CLUB';
   const unread = notifs.filter((n) => !n.read).length;
   const features = game?.features || {};
@@ -134,6 +162,7 @@ export default function UserApp() {
       </div>
 
       <div className="content page-enter" key={tab}>
+        <ErrorBoundary label={NAV.find(n => n.id === tab)?.label || tab}>
         {announce && (
           <div className={`announce-bar ${announce.priority || 'info'}`}>
             <Ic n="megaphone" s={18} />
@@ -150,6 +179,7 @@ export default function UserApp() {
         {tab === 'bets' && <MyBets user={user} />}
         {tab === 'chat' && <Chat game={game} profile={profile} user={user} />}
         {tab === 'profile' && <Profile game={game} profile={profile} user={user} onProfile={setProfile} features={features} />}
+        </ErrorBoundary>
       </div>
 
       <div className="bottomnav">

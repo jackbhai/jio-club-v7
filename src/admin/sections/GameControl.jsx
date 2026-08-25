@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase, rpc } from '../../lib/supabase.js';
-import { toast, Field, StatCard } from '../../components/ui.jsx';
+import { toast, Field, StatCard, Confirm } from '../../components/ui.jsx';
 import { Ic } from '../../lib/icons.jsx';
 import { sfx } from '../../lib/sound.js';
 import { numColor } from '../../lib/utils.js';
@@ -15,6 +15,10 @@ export default function GameControl() {
   const [gameCfg, setGameCfg] = useState(null);
   const [results, setResults] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [confirmForce, setConfirmForce] = useState(null);
+  const [confirmSettle, setConfirmSettle] = useState(false);
+  const [confirmLimits, setConfirmLimits] = useState(false);
+  const [maxBefore, setMaxBefore] = useState(10000);
 
   const load = useCallback(async () => {
     const [cfg, res] = await Promise.all([
@@ -46,17 +50,7 @@ export default function GameControl() {
     sfx.cash(); toast(msg || 'Game settings saved — live abhi', 'success');
   }
 
-  async function settleNow() {
-    setBusy(true);
-    try {
-      await rpc('admin_action', { p_action: 'tick-now' });
-      sfx.cash(); toast('Settled! Latest period resolve ho gaya', 'success');
-      load();
-    } catch (e) { toast(e.message, 'error'); }
-    finally { setBusy(false); }
-  }
-
-  async function forceResult(n) {
+  async function doForceResult(n) {
     setBusy(true);
     try {
       await rpc('admin_action', { p_action: 'force-result', p_params: { number: n } });
@@ -64,26 +58,38 @@ export default function GameControl() {
       toast(n === null ? 'Force cleared — normal engine wapas' : `NEXT period FORCED to ${n}`, 'success');
       setGameCfg((d) => ({ ...d, forceNextResult: n }));
     } catch (e) { toast(e.message, 'error'); }
-    finally { setBusy(false); }
+    finally { setBusy(false); setConfirmForce(null); }
   }
 
-  /* ---- probability preview (client-computed) ---- */
+  async function doSettleNow() {
+    setBusy(true);
+    try {
+      await rpc('admin_action', { p_action: 'tick-now' });
+      sfx.cash(); toast('Settled! Latest period resolve ho gaya', 'success');
+      load();
+    } catch (e) { toast(e.message, 'error'); }
+    finally { setBusy(false); setConfirmSettle(false); }
+  }
+
+  /* ---- probability preview (client-computed) ----
+     V7-008 fix: categories OVERLAP (0 har color pe jeetata hai), isliye
+     yeh "iss bet type ke jeetne ka chance" hai — total 100% nahi hota.
+     Per-number distribution alag se dikhi jayegi jo exact 100% banati hai. */
+  const numDist = weights.map((x) => Math.max(0, Number(x)) / totalW * 100);
   const prob = (() => {
     if (mode === 'target') {
       return [
-        { label: 'Period Win-Rate (server-managed)', pct: Math.round(target * 100) },
-        { label: 'Har bet type ka chance', pct: Math.round(target * 100) }
+        { label: 'Period win-rate (server target)', pct: Math.round(target * 100), note: 'engine pending bets dekhke ~is target pe result chunta hai' }
       ];
     }
-    const w = weights.map((x) => Math.max(0, Number(x)) / totalW);
-    const P = (idxs) => idxs.reduce((s, i) => s + (w[i] || 0), 0) * 100;
+    const P = (idxs) => idxs.reduce((s, i) => s + (numDist[i] || 0), 0);
     return [
-      { label: 'Green wins', pct: P([0, 1, 3, 5, 7, 9]) },
-      { label: 'Red wins', pct: P([0, 2, 4, 6, 8]) },
-      { label: 'Violet wins', pct: P([0]) },
+      { label: 'Green bet wins', pct: P([0, 1, 3, 5, 7, 9]) },
+      { label: 'Red bet wins', pct: P([0, 2, 4, 6, 8]) },
+      { label: 'Violet bet wins', pct: P([0]) },
       { label: 'Any single number', pct: 100 / 10 },
-      { label: 'Big (5-9)', pct: P([5, 6, 7, 8, 9]) },
-      { label: 'Small (0-4)', pct: P([0, 1, 2, 3, 4]) }
+      { label: 'Big (5-9) wins', pct: P([5, 6, 7, 8, 9]) },
+      { label: 'Small (0-4) wins', pct: P([0, 1, 2, 3, 4]) }
     ];
   })();
 
@@ -151,8 +157,13 @@ export default function GameControl() {
 
         {/* Live probability preview */}
         <div style={{ marginTop: 18, padding: 14, background: 'var(--card-2)', borderRadius: 12 }}>
-          <div style={{ fontWeight: 800, fontSize: '0.82rem', marginBottom: 12, display: 'flex', gap: 7, alignItems: 'center', color: 'var(--text-dim)' }}>
+          <div style={{ fontWeight: 800, fontSize: '0.82rem', marginBottom: 6, display: 'flex', gap: 7, alignItems: 'center', color: 'var(--text-dim)' }}>
             <Ic n="chart" s={15} />LIVE PROBABILITY PREVIEW (current config)
+          </div>
+          <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginBottom: 12, display: 'flex', gap: 5, alignItems: 'flex-start' }}>
+            <Ic n="info" s={12} style={{ marginTop: 2, flexShrink: 0 }} />
+            Note: color bets OVERLAP karte hain (0 = Red+Violet, Green/Red/Violet sab pe jeeta hai), isliye inki
+            probabilities ka total 100% se zyada ho sakta hai — yeh "iss bet ke jeetne ka chance" hai, mutually-exclusive events nahi.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 10 }}>
             {prob.map((p) => (
@@ -162,6 +173,24 @@ export default function GameControl() {
               </div>
             ))}
           </div>
+          {mode !== 'target' && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: '0.78rem', marginBottom: 8, color: 'var(--text-dim)' }}>
+                NUMBER DISTRIBUTION (0-9 — exact 100%)
+              </div>
+              <div style={{ display: 'flex', gap: 5, alignItems: 'flex-end', height: 64 }}>
+                {numDist.map((p, n) => (
+                  <div key={n} style={{ flex: 1, textAlign: 'center' }}>
+                    <div style={{ height: 44, background: 'var(--card)', borderRadius: 4, display: 'flex', alignItems: 'flex-end', overflow: 'hidden' }}>
+                      <div style={{ width: '100%', height: Math.max(3, p) + '%', background: n === 0 ? 'linear-gradient(180deg,#7c6cff,#e53935)' : n % 2 === 0 ? '#e53935' : '#00c853', borderRadius: 4 }}></div>
+                    </div>
+                    <div style={{ fontSize: '0.62rem', fontWeight: 800, marginTop: 3 }}>{n}</div>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--text-dim)' }}>{p.toFixed(0)}%</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <button className="btn btn-primary" style={{ marginTop: 16 }} disabled={busy} onClick={() => save('Probability engine saved')}>
@@ -177,16 +206,16 @@ export default function GameControl() {
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => (
               <button key={n} className={`num num-sm ${numColor(n)}`} style={{ width: 38, height: 38, outline: g.forceNextResult === n ? '3px solid var(--accent)' : 'none' }}
-                onClick={() => forceResult(n)} disabled={busy}>
+                onClick={() => { setConfirmForce(n); sfx.click(); }} disabled={busy}>
                 {n}
               </button>
             ))}
-            <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'center' }} onClick={() => forceResult(null)} disabled={busy}>
-              <Ic n="refresh" s={14} />Clear
+            <button className="btn btn-ghost btn-sm" style={{ alignSelf: 'center' }} onClick={() => { setConfirmForce(null); sfx.click(); }} disabled={busy}>
+              <Ic n="refresh" s={14} />Clear Force
             </button>
           </div>
           <div style={{ borderTop: '1px solid var(--border-solid)', marginTop: 14, paddingTop: 14 }}>
-            <button className="btn btn-success btn-block" onClick={settleNow} disabled={busy}>
+            <button className="btn btn-success btn-block" onClick={() => setConfirmSettle(true)} disabled={busy}>
               <Ic n="bolt" s={16} />Settle Latest Period Now
             </button>
             <p className="card-sub" style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
@@ -222,17 +251,45 @@ export default function GameControl() {
             </div>
           </div>
           <div className="setting-row">
-            <div><div className="s-label">Maximum bet (₹)</div></div>
+            <div><div className="s-label">Maximum bet (₹)</div><div className="s-desc">{(g.maxBet ?? 0) > 100000 ? 'HIGH LIMIT — save pe typed confirmation milegi' : 'per-bet hard cap (server enforced)'}</div></div>
             <div className="s-ctrl">
               <input className="input" style={{ width: 110 }} type="number" min="1" value={g.maxBet ?? 10000}
                 onChange={(e) => set('maxBet', Number(e.target.value) || 10000)} />
             </div>
           </div>
-          <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={busy} onClick={() => save('Period settings saved')}>
+          <button className="btn btn-primary" style={{ marginTop: 12 }} disabled={busy}
+            onClick={() => {
+              setMaxBefore(g.maxBet ?? 10000);
+              if ((gameCfg.maxBet ?? 0) > 100000) setConfirmLimits(true);
+              else save('Period settings saved');
+            }}>
             <Ic n="check" s={16} />Save
           </button>
         </div>
       </div>
+
+      {/* HIGH-IMPACT CONFIRMATIONS (V7-016) */}
+      {confirmForce !== null && (
+        <Confirm title={`Force next result → ${confirmForce}`} icon="zap"
+          msg={`Agla period number ${confirmForce} hi aayega (ek period ke liye, phir engine wapas). Yeh action admin_logs mein record hoga. Continue?`}
+          yesLabel={`Yes, force ${confirmForce}`}
+          onNo={() => setConfirmForce(null)}
+          onYes={() => doForceResult(confirmForce)} />
+      )}
+      {confirmSettle && (
+        <Confirm title="Settle latest period now?" icon="bolt"
+          msg="Latest ended period turant resolve ho jayega (cron wait nahi karega). Bets close hone ke baad hi karo."
+          yesLabel="Settle Now"
+          onNo={() => setConfirmSettle(false)}
+          onYes={doSettleNow} />
+      )}
+      {confirmLimits && (
+        <Confirm title="High max-bet limit" icon="alert"
+          msg={`Max bet ₹${maxBefore} → ₹${gameCfg.maxBet}. High limits operator exposure badhate hain. Typed confirm: neeche "CONFIRM" type karo.`}
+          yesLabel="Apply"
+          onNo={() => setConfirmLimits(false)}
+          onYes={() => { setConfirmLimits(false); save('Period settings saved (high limit)'); }} />
+      )}
     </div>
   );
 }

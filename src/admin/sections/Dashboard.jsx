@@ -31,11 +31,24 @@ export default function Dashboard() {
   async function toggleGame(key) {
     if (!gameCfg) return;
     const next = { ...gameCfg, [key]: !gameCfg[key] };
-    await supabase.from('settings').update({ value: next }).eq('key', 'game');
-    setGameCfg(next);
     sfx.click();
+    const { error } = await supabase.from('settings').update({ value: next }).eq('key', 'game');
+    if (error) {
+      // V7-017 fix: error pe local state rollback + visible error
+      toast('Update failed: ' + error.message, 'error');
+      load();
+      return;
+    }
+    setGameCfg(next);
     toast(key === 'active' ? (next.active ? 'Game RESUMED' : 'Game PAUSED') : (next.maintenance ? 'Maintenance ON' : 'Maintenance OFF'), next.maintenance || !next.active ? 'info' : 'success');
     load();
+  }
+
+  async function viewShot(path) {
+    if (!path) return;
+    const { data, error } = await supabase.storage.from('screenshots').createSignedUrl(path, 300);
+    if (error) { toast('Screenshot open failed: ' + error.message, 'error'); return; }
+    window.open(data.signedUrl, '_blank', 'noopener');
   }
 
   if (!stats) return <div className="spinner"></div>;
@@ -84,7 +97,7 @@ export default function Dashboard() {
                 <div style={{ fontWeight: 800 }}>{money(d.amount)} {d.payment_mode === 'razorpay' && <span className="badge badge-active">RZP</span>}</div>
                 <div className="card-sub">{d.uid?.slice(0, 8)} · {timeAgo(d.created_at)} · ref: {d.upi_ref || '—'}</div>
               </div>
-              {d.screenshot_url && <a className="btn btn-ghost btn-sm" href={d.screenshot_url} target="_blank" rel="noreferrer"><Ic n="image" s={15} /></a>}
+              {d.screenshot_url && <button className="btn btn-ghost btn-sm" onClick={() => viewShot(d.screenshot_url)}><Ic n="image" s={15} /></button>}
             </div>
           ))}
           <a className="btn btn-ghost btn-block" style={{ marginTop: 10 }} href="#/admin" onClick={(e) => { e.preventDefault(); window.dispatchEvent(new CustomEvent('jc:goto', { detail: 'deposits' })); }}>

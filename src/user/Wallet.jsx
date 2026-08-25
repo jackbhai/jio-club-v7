@@ -25,17 +25,23 @@ export default function Wallet({ game, profile, user, features }) {
   const payments = g.payments || {};
   const appName = g.appearance?.appName || 'JIO CLUB';
   const amt = parseFloat(amount) || 0;
+  const minDep = wallet.minDeposit || 10;
+  const minWd = wallet.minWithdrawal || 200;
+  const maxWd = wallet.maxWithdrawal || 100000;
   const depositOn = features?.deposit !== false;
   const withdrawOn = features?.withdraw !== false;
   const couponsOn = features?.coupons !== false;
+  const depositValid = amt >= minDep && amt <= 1000000;
+  const withdrawValid = amt >= minWd && amt <= maxWd && upiId.trim().length >= 5 && amt <= (profile.balance || 0);
 
   useEffect(() => { setUpiId(profile?.upi_id || ''); }, [profile?.upi_id]);
 
+  // QR sirf VALID amount pe generate (V7-009 fix)
   useEffect(() => {
-    if (!upi.upiId || amt <= 0 || !depositOn) { setQr(''); return; }
+    if (!upi.upiId || !depositValid || !depositOn) { setQr(''); return; }
     const s = `upi://pay?pa=${encodeURIComponent(upi.upiId)}&pn=${encodeURIComponent(appName)}&am=${amt}&cu=INR&tn=${encodeURIComponent(appName + ' deposit ' + (ref || ''))}`;
     QRCode.toDataURL(s, { width: 240, margin: 1, color: { dark: '#171c2e' } }).then(setQr).catch(() => setQr(''));
-  }, [upi.upiId, amt, ref, appName, depositOn]);
+  }, [upi.upiId, amt, ref, appName, depositOn, depositValid]);
 
   async function loadHistory() {
     const [dep, wd] = await Promise.all([
@@ -47,29 +53,34 @@ export default function Wallet({ game, profile, user, features }) {
   useEffect(() => { loadHistory(); }, [user.id, tab]);
 
   async function onDeposit() {
-    if (amt < (wallet.minDeposit || 10)) { toast(`Minimum deposit ₹${wallet.minDeposit || 10}`, 'error'); return; }
+    if (!depositValid) { toast(`Minimum deposit ₹${minDep}`, 'error'); return; }
     if (!ref.trim()) { toast('Enter UPI transaction reference (UTR)', 'error'); return; }
     setBusy(true); sfx.click();
     try {
-      let screenshot = '';
+      let shotPath = '';
       if (shot) {
-        const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${shot.type.includes('png') ? 'png' : 'jpg'}`;
-        const { error: uErr } = await supabase.storage.from('screenshots').upload(path, shot, { contentType: shot.type || 'image/jpeg' });
+        const ext = shot.type === 'image/png' ? 'png' : 'jpg';
+        shotPath = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: uErr } = await supabase.storage.from('screenshots').upload(shotPath, shot, { contentType: shot.type || 'image/jpeg' });
         if (uErr) throw new Error('Screenshot upload failed: ' + uErr.message);
-        const { data } = supabase.storage.from('screenshots').getPublicUrl(path);
-        screenshot = data.publicUrl;
       }
-      const { error } = await supabase.from('deposits').insert({
-        uid: user.id, amount: amt, upi_ref: ref.trim(), screenshot_url: screenshot, payment_mode: 'upi', status: 'pending'
-      });
-      if (error) throw new Error(error.message);
+      // V7-005 fix: server-side validated RPC (amount/UTR/ownership)
+      const res = await rpc('request_deposit', { p_amount: amt, p_upi_ref: ref.trim(), p_screenshot_url: shotPath });
       sfx.cash();
-      toast('Deposit submitted! Admin will verify shortly', 'success');
+      toast(`Deposit ${res?.receipt || ''} submitted! Admin will verify shortly`, 'success');
       setAmount(''); setRef(''); setShot(null); setShotUrl('');
       loadHistory();
     } catch (e) {
       sfx.error(); toast(e.message, 'error');
     } finally { setBusy(false); }
+  }
+
+  // V7-004 fix: private bucket → signed URL se screenshot view
+  async function viewShot(path) {
+    if (!path) return;
+    const { data, error } = await supabase.storage.from('screenshots').createSignedUrl(path, 300);
+    if (error) { toast('Screenshot open failed', 'error'); return; }
+    window.open(data.signedUrl, '_blank', 'noopener');
   }
 
   async function onRazorpay() {
@@ -189,34 +200,44 @@ export default function Wallet({ game, profile, user, features }) {
                 </div>
 
                 {payments.mode === 'razorpay' && payments.razorpayKeyId ? (
-                  <button className="btn btn-primary btn-block" onClick={onRazorpay} disabled={busy}>
+                  <button className="btn btn-primary btn-block" onClick={onRazorpay} disabled={busy || amt <= 0}>
                     <Ic n="zap" s={16} />{busy ? 'Please wait…' : 'Pay Now with Razorpay (test mode)'}
                   </button>
                 ) : (
                   <>
+                    {amt > 0 && !depositValid && (
+                      <div className="betting-closed" style={{ marginBottom: 12 }}>
+                        <Ic n="alert" s={15} />Enter amount between ₹{minDep} and ₹10,00,000
+                      </div>
+                    )}
                     {upi.upiId && (
                       <div style={{ textAlign: 'center', marginBottom: 14 }}>
-                        <div style={{ fontWeight: 800, marginBottom: 6 }}>Send {amt ? money(amt) : 'amount'} to UPI ID:</div>
+                        <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                          {depositValid ? `Send ${money(amt)} to UPI ID:` : 'UPI ID (QR unlocks on valid amount):'}
+                        </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center' }}>
                           <input className="input" style={{ width: 190, textAlign: 'center', fontWeight: 800 }} readOnly value={upi.upiId} />
                           <button className="btn btn-ghost btn-sm" onClick={async () => { await copyText(upi.upiId); toast('UPI ID copied', 'success'); }}><Ic n="copy" s={14} /></button>
                         </div>
                         {qr && <img src={qr} alt="UPI QR" style={{ width: 170, height: 170, margin: '12px auto 0', display: 'block', borderRadius: 14, background: '#fff', padding: 10 }} />}
-                        <div style={{ color: 'var(--text-dim)', fontSize: '0.74rem', marginTop: 8, display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center' }}>
+                        {qr && <div style={{ color: 'var(--text-dim)', fontSize: '0.74rem', marginTop: 8, display: 'flex', gap: 5, justifyContent: 'center', alignItems: 'center' }}>
                           <Ic n="qr" s={12} />Scan with {upi.apps?.join(', ') || 'any UPI app'}
-                        </div>
+                        </div>}
                       </div>
                     )}
                     <Field label="UPI Transaction Ref (UTR)">
                       <input className="input" placeholder="e.g. 415223344556" value={ref} onChange={(e) => setRef(e.target.value)} />
                     </Field>
                     <Field label="Payment Screenshot (recommended)">
-                      <input type="file" accept="image/*" onChange={pickShot} />
+                      <input type="file" accept="image/png,image/jpeg" onChange={pickShot} />
                       {shotUrl && <img src={shotUrl} alt="shot" style={{ maxHeight: 110, borderRadius: 10, marginTop: 8 }} />}
                     </Field>
-                    <button className="btn btn-primary btn-block" onClick={onDeposit} disabled={busy}>
+                    <button className="btn btn-primary btn-block" onClick={onDeposit} disabled={busy || !depositValid || !ref.trim()}>
                       <Ic n="checkCircle" s={16} />{busy ? 'Submitting…' : 'I Have Paid — Submit for Approval'}
                     </button>
+                    <p className="card-sub" style={{ marginTop: 8, display: 'flex', gap: 5, alignItems: 'center' }}>
+                      <Ic n="lock" s={12} />Screenshot private storage mein jaata hai — sirf aap aur admin dekh sakte hain.
+                    </p>
                   </>
                 )}
 
@@ -249,7 +270,16 @@ export default function Wallet({ game, profile, user, features }) {
                 <Field label="Your UPI ID">
                   <input className="input" placeholder="yourname@upi" value={upiId} onChange={(e) => setUpiId(e.target.value)} />
                 </Field>
-                <button className="btn btn-success btn-block" onClick={onWithdraw} disabled={busy}>
+                {amt > 0 && !withdrawValid && (
+                  <div className="betting-closed" style={{ marginBottom: 12 }}>
+                    <Ic n="alert" s={15} />
+                    {amt > (profile.balance || 0) ? 'Insufficient balance'
+                      : amt < minWd ? `Minimum withdrawal ₹${minWd}`
+                      : amt > maxWd ? `Maximum withdrawal ₹${maxWd}`
+                      : 'Valid UPI ID required'}
+                  </div>
+                )}
+                <button className="btn btn-success btn-block" onClick={onWithdraw} disabled={busy || !withdrawValid}>
                   <Ic n="arrowUp" s={16} />{busy ? 'Submitting…' : `Request Withdrawal${amt ? ' · ' + money(amt) : ''}`}
                 </button>
                 <p className="card-sub" style={{ marginTop: 10, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
@@ -281,9 +311,9 @@ export default function Wallet({ game, profile, user, features }) {
                     <div style={{ fontWeight: 800 }}>{money(h.amount)} {h.payment_mode === 'razorpay' && <span className="badge badge-active" style={{ marginLeft: 6 }}>Razorpay</span>}</div>
                     <div className="card-sub">{fmtDT(h.created_at)}{h.note ? ' · ' + h.note : ''}</div>
                     {historyTab === 'deposits' && h.screenshot_url && (
-                      <a href={h.screenshot_url} target="_blank" rel="noreferrer" className="card-sub" style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <button onClick={() => viewShot(h.screenshot_url)} className="card-sub" style={{ display: 'inline-flex', gap: 4, alignItems: 'center', color: 'var(--accent)', fontWeight: 700, marginTop: 3 }}>
                         <Ic n="image" s={12} />view screenshot
-                      </a>
+                      </button>
                     )}
                   </div>
                   <span className={`badge badge-${h.status}`}>{h.status}</span>

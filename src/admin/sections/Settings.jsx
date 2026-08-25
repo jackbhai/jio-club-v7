@@ -20,7 +20,7 @@ const TABS = [
 const DEF = {
   features: { deposit: true, withdraw: true, coupons: true, referral: true },
   payouts: { green: 2, red: 2, violet: 4.5, number: 9, size: 2 },
-  wallet: { minDeposit: 10, minWithdrawal: 200, maxWithdrawal: 100000, welcomeBonus: 0 },
+  wallet: { minDeposit: 10, minWithdrawal: 200, maxWithdrawal: 100000, welcomeBonus: 0, dailyBetLimit: 50000 },
   upi: { upiId: '', qrText: '', apps: ['GPay', 'PhonePe', 'Paytm', 'Bhimbhi'] },
   payments: { mode: 'upi', razorpayKeyId: '' },
   referral: { enabled: true, thresholds: [
@@ -55,7 +55,9 @@ export default function Settings() {
 
   async function save(key, msg) {
     setBusy(true);
-    const { error } = await supabase.from('settings').upsert({ key, value: data[key] }, { onConflict: 'key' });
+    // strip undefined keys (data hygiene)
+    const clean = Object.fromEntries(Object.entries(data[key] || {}).filter(([k, v]) => k !== 'undefined' && v !== undefined));
+    const { error } = await supabase.from('settings').upsert({ key, value: clean }, { onConflict: 'key' });
     setBusy(false);
     if (error) { sfx.error(); toast(error.message, 'error'); return; }
     sfx.cash(); toast(msg || `Saved ${key}`, 'success');
@@ -131,6 +133,13 @@ export default function Settings() {
           <N k="wallet" key="minWithdrawal" label="Minimum Withdrawal (₹)" />
           <N k="wallet" key="maxWithdrawal" label="Maximum Withdrawal (₹)" />
           <N k="wallet" key="welcomeBonus" label="Welcome Bonus (₹, once per user)" />
+          <div className="setting-row">
+            <div><div className="s-label">Daily Bet Limit per user (₹)</div><div className="s-desc">0 = unlimited · server pe enforce hota hai</div></div>
+            <div className="s-ctrl">
+              <input className="input" type="number" min="0" value={data.wallet.dailyBetLimit ?? 0}
+                onChange={(e) => set('wallet', { dailyBetLimit: Number(e.target.value) || 0 })} />
+            </div>
+          </div>
           <Save k="wallet" />
         </div>
       )}

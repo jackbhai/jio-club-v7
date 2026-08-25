@@ -1,6 +1,39 @@
 import React, { useEffect, useState } from 'react';
 import { Ic, RANK_ICONS } from '../lib/icons.jsx';
 
+/* ---------------- Error Boundary (blank screen = kabhi nahi) ---------------- */
+export class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) {
+    try { console.error('[jc-error]', this.props.label || 'section', err, info?.componentStack); } catch (e) { /* ignore */ }
+  }
+  render() {
+    if (this.state.err) {
+      return (
+        <div className="card" style={{ textAlign: 'center', padding: 34, border: '1px solid rgba(229,72,77,0.4)' }}>
+          <div style={{ marginBottom: 10, color: 'var(--danger)' }}><Ic n="alert" s={40} /></div>
+          <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 6 }}>
+            {this.props.label || 'This section'} me kuch gadbad hui
+          </div>
+          <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem', marginBottom: 14 }}>
+            Data safe hai. Retry karein ya dobara load karein.
+          </div>
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button className="btn btn-primary btn-sm" onClick={() => this.setState({ err: null })}>
+              <Ic n="refresh" s={14} />Retry
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={() => window.location.reload()}>
+              <Ic n="refresh" s={14} />Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 /* ---------------- Toasts (global, event-based) ---------------- */
 export function toast(msg, type = 'info') {
   window.dispatchEvent(new CustomEvent('jc:toast', { detail: { msg, type, id: Date.now() + Math.random() } }));

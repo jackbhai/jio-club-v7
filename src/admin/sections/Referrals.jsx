@@ -12,15 +12,22 @@ export default function Referrals() {
   const [refCfg, setRefCfg] = useState(null);
   const [thresholds, setThresholds] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
 
   const load = useCallback(async () => {
-    const [users, cfg] = await Promise.all([
-      supabase.from('profiles').select('*').order('referral_count', { ascending: false }).limit(200),
-      supabase.from('settings').select('value').eq('key', 'referral').maybeSingle()
-    ]);
-    setRows(users.data || []);
-    setRefCfg(cfg.data?.value);
-    setThresholds(cfg.data?.value?.thresholds);
+    setErr(null);
+    try {
+      const [users, cfg] = await Promise.all([
+        supabase.from('profiles').select('*').order('referral_count', { ascending: false }).limit(200),
+        supabase.from('settings').select('value').eq('key', 'referral').maybeSingle()
+      ]);
+      if (users.error) throw new Error(users.error.message);
+      setRows(users.data || []);
+      setRefCfg(cfg.data?.value);
+      setThresholds(cfg.data?.value?.thresholds);
+    } catch (e) {
+      setErr(e.message || 'Failed to load referral data');
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -51,8 +58,20 @@ export default function Referrals() {
     setThresholds(next);
   }
 
+  if (err) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 34, border: '1px solid rgba(229,72,77,0.4)' }}>
+        <div style={{ marginBottom: 10, color: 'var(--danger)' }}><Ic n="alert" s={38} /></div>
+        <div style={{ fontWeight: 800, marginBottom: 6 }}>Referral data load nahi hua</div>
+        <div style={{ color: 'var(--text-dim)', fontSize: '0.82rem', marginBottom: 14 }}>{err}</div>
+        <button className="btn btn-primary btn-sm" onClick={load}><Ic n="refresh" s={14} />Retry</button>
+      </div>
+    );
+  }
+
   return (
     <div>
+      {rows === null && <div className="spinner"></div>}
       <div className="stat-grid" style={{ marginBottom: 14 }}>
         <StatCard label="Active Referrals" value={(rows || []).filter((u) => u.referred_by).length} sub="users who joined via code" tone="sc-blue" icon="share" />
         <StatCard label="Top Referrer" value={withTeam[0]?.referral_code || '—'} sub={withTeam[0] ? withTeam[0].email : 'no teams yet'} tone="sc-gold" icon="crown" />

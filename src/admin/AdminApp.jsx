@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '../lib/supabase.js';
-import { Toasts, toast } from '../components/ui.jsx';
+import { Toasts, toast, ErrorBoundary } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
 import { sfx } from '../lib/sound.js';
 import { cx } from '../lib/utils.js';
@@ -153,20 +153,22 @@ export default function AdminApp() {
           <span className="badge badge-active"><Ic n="user" s={12} />{profile.email}</span>
         </div>
         <div className="page-enter" key={section}>
-          {section === 'dashboard' && <Dashboard profile={profile} />}
-          {section === 'users' && <Users />}
-          {section === 'gamecontrol' && <GameControl />}
-          {section === 'results' && <Results />}
-          {section === 'bets' && <Bets />}
-          {section === 'deposits' && <Deposits />}
-          {section === 'withdrawals' && <Withdrawals />}
-          {section === 'coupons' && <Coupons />}
-          {section === 'referrals' && <Referrals />}
-          {section === 'chat' && <ChatSection />}
-          {section === 'announcements' && <AnnouncementsSection />}
-          {section === 'analytics' && <Analytics />}
-          {section === 'logs' && <Logs />}
-          {section === 'settings' && <Settings />}
+          <ErrorBoundary label={sec?.label}>
+            {section === 'dashboard' && <Dashboard profile={profile} />}
+            {section === 'users' && <Users />}
+            {section === 'gamecontrol' && <GameControl />}
+            {section === 'results' && <Results />}
+            {section === 'bets' && <Bets />}
+            {section === 'deposits' && <Deposits />}
+            {section === 'withdrawals' && <Withdrawals />}
+            {section === 'coupons' && <Coupons />}
+            {section === 'referrals' && <Referrals />}
+            {section === 'chat' && <ChatSection />}
+            {section === 'announcements' && <AnnouncementsSection />}
+            {section === 'analytics' && <Analytics />}
+            {section === 'logs' && <Logs />}
+            {section === 'settings' && <Settings />}
+          </ErrorBoundary>
         </div>
       </div>
     </div>

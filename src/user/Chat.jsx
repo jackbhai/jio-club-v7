@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { supabase } from '../lib/supabase.js';
+import { supabase, rpc } from '../lib/supabase.js';
 import { sfx } from '../lib/sound.js';
 import { toast, RankBadge, Empty } from '../components/ui.jsx';
 import { Ic } from '../lib/icons.jsx';
@@ -37,14 +37,14 @@ export default function Chat({ game, profile, user }) {
     if (!m) return;
     if (m.length > maxLen) { toast(`Max ${maxLen} characters`, 'error'); return; }
     sfx.click();
-    const { error } = await supabase.from('chats').insert({
-      uid: user.id,
-      name: (profile.email || 'user').split('@')[0],
-      rank: profile.rank || 'bronze',
-      message: m
-    });
-    if (error) { toast(error.message, 'error'); return; }
-    setText('');
+    // V7-013 fix: server RPC — rate limit (1 msg / 3s) + name/rank server se
+    try {
+      await rpc('send_chat', { p_message: m });
+      setText('');
+    } catch (e) {
+      sfx.error();
+      toast(e.message, 'error');
+    }
   }
 
   if (!chatOn) return <Empty icon="chat" msg="Chat is disabled by admin" />;
