@@ -16,6 +16,19 @@ import Chat from './Chat.jsx';
 import Support from './Support.jsx';
 import Profile from './Profile.jsx';
 
+// In-app browsers (WhatsApp/Telegram/GPay/FB/IG) — yahan payment iframes
+// aksar block ho jaate hain ("This content is blocked"). Banner se user
+// ko real browser me kholne ke liye batate hain.
+const IN_APP = (() => {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  if (/WhatsApp/i.test(ua)) return 'WhatsApp';
+  if (/Telegram/i.test(ua)) return 'Telegram';
+  if (/GPay|googlepay|Gpay\//i.test(ua)) return 'GPay';
+  if (/FB_IAB|FBAV|; FB\/|Facebook/i.test(ua)) return 'Facebook';
+  if (/Instagram/i.test(ua)) return 'Instagram';
+  return null;
+})();
+
 export default function UserApp() {
   const t = useT();
   const [user, setUser] = useState(null);
@@ -29,6 +42,7 @@ export default function UserApp() {
   const [theme, setThemeState] = useState(getTheme());
   const [installEvt, setInstallEvt] = useState(null);
   const [showInstall, setShowInstall] = useState(false);
+  const [hideInAppBanner, setHideInAppBanner] = useState(false);
   const [reportBet, setReportBet] = useState(null);
   const prevBal = useRef(null);
   const [balBump, setBalBump] = useState(false);
@@ -199,6 +213,22 @@ export default function UserApp() {
           <Ic n={theme === 'dark' ? 'sun' : 'moon'} s={17} />
         </button>
       </div>
+
+      {/* In-app browser warning — payments yahan break hote hain */}
+      {IN_APP && !hideInAppBanner && (
+        <div style={{
+          margin: '10px 14px 0', padding: '10px 12px', borderRadius: 12,
+          display: 'flex', gap: 10, alignItems: 'center',
+          background: 'rgba(255,200,87,0.12)', border: '1px solid rgba(255,200,87,0.45)'
+        }}>
+          <Ic n="info" s={18} style={{ color: 'var(--warning)', flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: '0.8rem', lineHeight: 1.45, color: 'var(--text)' }}>
+            Aap <b>{IN_APP}</b> ke andar page khole ho — <b>payment yahan block ho sakti hai</b>.
+            Upar <b>menu (⋮ / ...)</b> → <b>"Open in browser"</b> dabao.
+          </div>
+          <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => setHideInAppBanner(true)}><Ic n="x" s={13} /></button>
+        </div>
+      )}
 
       <div className="content page-enter" key={tab}>
         {announce && (
